@@ -31,16 +31,25 @@ interface PenSettingsToolbarProps {
   onClose: () => void;
 }
 
-// Color Conversion Utilities (simplified)
+// Color Conversion Utilities
 const hexToRgb = (hex: string): { r: number; g: number; b: number } | null => {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result
-    ? {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim());
+  if (result) {
+    return {
         r: parseInt(result[1], 16),
         g: parseInt(result[2], 16),
         b: parseInt(result[3], 16),
-      }
-    : null;
+      };
+  }
+  const shortResult = /^#?([a-f\d])([a-f\d])([a-f\d])$/i.exec(hex.trim());
+  if (shortResult) {
+    return {
+        r: parseInt(shortResult[1] + shortResult[1], 16),
+        g: parseInt(shortResult[2] + shortResult[2], 16),
+        b: parseInt(shortResult[3] + shortResult[3], 16),
+    }
+  }
+  return null;
 };
 
 const rgbToHex = (r: number, g: number, b: number): string => {
@@ -65,10 +74,10 @@ const rgbToHsv = (r: number, g: number, b: number): { h: number; s: number; v: n
 };
 
 const hsvToRgb = (h: number, s: number, v: number): { r: number; g: number; b: number } => {
-  s /= 100; v /= 100; h /= 360;
+  s /= 100; v /= 100; 
   let r = 0, g = 0, b = 0;
-  const i = Math.floor(h * 6);
-  const f = h * 6 - i;
+  const i = Math.floor((h / 360) * 6);
+  const f = (h / 360) * 6 - i;
   const p = v * (1 - s);
   const q = v * (1 - f * s);
   const t = v * (1 - (1 - f) * s);
@@ -98,7 +107,6 @@ export default function PenSettingsToolbar({
   const { toast } = useToast();
   const [isColorPickerDialogOpen, setIsColorPickerDialogOpen] = React.useState(false);
   
-  // State for custom color picker
   const [initialColorDialog, setInitialColorDialog] = React.useState(penColor);
   const [currentHue, setCurrentHue] = React.useState(0);
   const [currentSaturation, setCurrentSaturation] = React.useState(100);
@@ -108,6 +116,7 @@ export default function PenSettingsToolbar({
   const svPickerRef = React.useRef<HTMLDivElement>(null);
   const hueSliderRef = React.useRef<HTMLDivElement>(null);
 
+  // Sync HSV from penColor when dialog opens
   React.useEffect(() => {
     if (isColorPickerDialogOpen) {
       setInitialColorDialog(penColor);
@@ -121,8 +130,9 @@ export default function PenSettingsToolbar({
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isColorPickerDialogOpen]); // penColor is intentionally omitted to not reset dialog on external penColor change while open
+  }, [isColorPickerDialogOpen]); // penColor intentionally omitted to not reset dialog on external penColor change while open
 
+  // Sync Hex from HSV
   React.useEffect(() => {
     const rgb = hsvToRgb(currentHue, currentSaturation, currentValue);
     setCurrentHexInput(rgbToHex(rgb.r, rgb.g, rgb.b));
@@ -141,6 +151,16 @@ export default function PenSettingsToolbar({
     }
   };
 
+  const updateSvFromEvent = (e: MouseEvent | React.MouseEvent<HTMLDivElement>, rect: DOMRect) => {
+    let x = e.clientX - rect.left;
+    let y = e.clientY - rect.top;
+    x = Math.max(0, Math.min(x, rect.width));
+    y = Math.max(0, Math.min(y, rect.height));
+    
+    setCurrentSaturation(Math.round((x / rect.width) * 100));
+    setCurrentValue(Math.round(100 - (y / rect.height) * 100));
+  };
+  
   const handleSvPickerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!svPickerRef.current) return;
     const rect = svPickerRef.current.getBoundingClientRect();
@@ -155,14 +175,11 @@ export default function PenSettingsToolbar({
     document.addEventListener('mouseup', onMouseUp);
   };
 
-  const updateSvFromEvent = (e: MouseEvent | React.MouseEvent<HTMLDivElement>, rect: DOMRect) => {
-    let x = e.clientX - rect.left;
+
+  const updateHueFromEvent = (e: MouseEvent | React.MouseEvent<HTMLDivElement>, rect: DOMRect) => {
     let y = e.clientY - rect.top;
-    x = Math.max(0, Math.min(x, rect.width));
     y = Math.max(0, Math.min(y, rect.height));
-    
-    setCurrentSaturation((x / rect.width) * 100);
-    setCurrentValue(100 - (y / rect.height) * 100);
+    setCurrentHue(Math.round((y / rect.height) * 360));
   };
 
   const handleHueSliderMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -179,15 +196,9 @@ export default function PenSettingsToolbar({
     document.addEventListener('mouseup', onMouseUp);
   };
 
-  const updateHueFromEvent = (e: MouseEvent | React.MouseEvent<HTMLDivElement>, rect: DOMRect) => {
-    let y = e.clientY - rect.top;
-    y = Math.max(0, Math.min(y, rect.height));
-    setCurrentHue((y / rect.height) * 360);
-  };
-
 
   const isValidHexColor = (color: string): boolean => {
-    return /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color);
+    return hexToRgb(color) !== null;
   };
 
   const handleCustomColorApply = () => {
@@ -218,9 +229,13 @@ export default function PenSettingsToolbar({
     setIsColorPickerDialogOpen(open);
   }
 
-  const svHandleX = (currentSaturation / 100) * 150; // 150 is width of SV picker
-  const svHandleY = (1 - currentValue / 100) * 150; // 150 is height of SV picker
-  const hueHandleY = (currentHue / 360) * 150; // 150 is height of Hue slider
+  const svPickerWidth = svPickerRef.current?.offsetWidth || 150;
+  const svPickerHeight = svPickerRef.current?.offsetHeight || 150;
+  const hueSliderHeight = hueSliderRef.current?.offsetHeight || 150;
+
+  const svHandleX = (currentSaturation / 100) * svPickerWidth;
+  const svHandleY = (1 - currentValue / 100) * svPickerHeight;
+  const hueHandleY = (currentHue / 360) * hueSliderHeight;
 
   return (
     <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 z-30 w-full max-w-sm px-4 sm:max-w-md">
@@ -302,7 +317,11 @@ export default function PenSettingsToolbar({
                       <div className="absolute inset-0 w-full h-full" style={{ background: 'linear-gradient(to top, black, transparent)' }} />
                       <div
                         className="absolute w-3 h-3 rounded-full border-2 border-white shadow-md transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-                        style={{ left: `${svHandleX}px`, top: `${svHandleY}px`, backgroundColor: currentHexInput }}
+                        style={{ 
+                            left: `${Math.min(svPickerWidth, Math.max(0,svHandleX))}px`, 
+                            top: `${Math.min(svPickerHeight, Math.max(0, svHandleY))}px`, 
+                            backgroundColor: currentHexInput 
+                        }}
                       />
                     </div>
                     {/* Hue Slider */}
@@ -314,7 +333,10 @@ export default function PenSettingsToolbar({
                     >
                        <div
                         className="absolute w-full h-1.5 border-y border-gray-600 bg-white/50 shadow-md transform -translate-y-1/2 pointer-events-none"
-                        style={{ left: 0, top: `${hueHandleY}px` }}
+                        style={{ 
+                            left: 0, 
+                            top: `${Math.min(hueSliderHeight, Math.max(0,hueHandleY))}px`
+                        }}
                       />
                     </div>
                   </div>
@@ -359,9 +381,9 @@ export default function PenSettingsToolbar({
                 <div
                   className="bg-foreground rounded-full"
                   style={{
-                    height: `${Math.min(width, 16)}px`,
-                    width: `${Math.min(width, 16)}px`,
-                    minHeight: '4px',
+                    height: `${Math.min(Math.max(width, 2), 16)}px`, // Ensure reasonable size
+                    width: `${Math.min(Math.max(width, 2), 16)}px`,
+                    minHeight: '4px', // Keep a minimum visible size
                     minWidth: '4px',
                   }}
                 />
@@ -373,3 +395,4 @@ export default function PenSettingsToolbar({
     </div>
   );
 }
+
