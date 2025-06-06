@@ -74,7 +74,7 @@ const rgbToHsv = (r: number, g: number, b: number): { h: number; s: number; v: n
 };
 
 const hsvToRgb = (h: number, s: number, v: number): { r: number; g: number; b: number } => {
-  s /= 100; v /= 100; 
+  s /= 100; v /= 100;
   let r = 0, g = 0, b = 0;
   const i = Math.floor((h / 360) * 6);
   const f = (h / 360) * 6 - i;
@@ -92,6 +92,14 @@ const hsvToRgb = (h: number, s: number, v: number): { r: number; g: number; b: n
   return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
 };
 
+// Helper to get clientX/Y from mouse or touch events
+const getPointerCoordinates = (e: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent) => {
+  if ('touches' in e && e.touches.length > 0) {
+    return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }
+  return { x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY };
+};
+
 
 export default function PenSettingsToolbar({
   penColor,
@@ -106,7 +114,7 @@ export default function PenSettingsToolbar({
 }: PenSettingsToolbarProps) {
   const { toast } = useToast();
   const [isColorPickerDialogOpen, setIsColorPickerDialogOpen] = React.useState(false);
-  
+
   const [initialColorDialog, setInitialColorDialog] = React.useState(penColor);
   const [currentHue, setCurrentHue] = React.useState(0);
   const [currentSaturation, setCurrentSaturation] = React.useState(100);
@@ -116,10 +124,30 @@ export default function PenSettingsToolbar({
   const svPickerRef = React.useRef<HTMLDivElement>(null);
   const hueSliderRef = React.useRef<HTMLDivElement>(null);
 
-  // Sync HSV from penColor when dialog opens
+  // Sync HSV from penColor when dialog opens or penColor changes
   React.useEffect(() => {
     if (isColorPickerDialogOpen) {
-      setInitialColorDialog(penColor);
+      // If dialog is open, we don't want external penColor changes to reset the interactive state
+      // We only set the initial state when it opens.
+    } else {
+      // If dialog is closed, keep the toolbar's internal state synced with the prop
+      setInitialColorDialog(penColor); // This might be redundant if penColor is source of truth
+      setCurrentHexInput(penColor);
+      const rgb = hexToRgb(penColor);
+      if (rgb) {
+        const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+        setCurrentHue(hsv.h);
+        setCurrentSaturation(hsv.s);
+        setCurrentValue(hsv.v);
+      }
+    }
+  }, [penColor, isColorPickerDialogOpen]);
+
+
+  // Effect to set initial color and HSV when dialog opens
+  React.useEffect(() => {
+    if (isColorPickerDialogOpen) {
+      setInitialColorDialog(penColor); // Capture the color when dialog opens
       setCurrentHexInput(penColor);
       const rgb = hexToRgb(penColor);
       if (rgb) {
@@ -130,7 +158,8 @@ export default function PenSettingsToolbar({
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isColorPickerDialogOpen]); // penColor intentionally omitted to not reset dialog on external penColor change while open
+  }, [isColorPickerDialogOpen]); // Only run when dialog open state changes
+
 
   // Sync Hex from HSV
   React.useEffect(() => {
@@ -151,49 +180,87 @@ export default function PenSettingsToolbar({
     }
   };
 
-  const updateSvFromEvent = (e: MouseEvent | React.MouseEvent<HTMLDivElement>, rect: DOMRect) => {
-    let x = e.clientX - rect.left;
-    let y = e.clientY - rect.top;
-    x = Math.max(0, Math.min(x, rect.width));
-    y = Math.max(0, Math.min(y, rect.height));
-    
-    setCurrentSaturation(Math.round((x / rect.width) * 100));
-    setCurrentValue(Math.round(100 - (y / rect.height) * 100));
+  // --- SV Picker Interaction ---
+  const updateSvFromEvent = (event: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent, rect: DOMRect) => {
+    const { x: clientX, y: clientY } = getPointerCoordinates(event);
+    let xPos = clientX - rect.left;
+    let yPos = clientY - rect.top;
+
+    xPos = Math.max(0, Math.min(xPos, rect.width));
+    yPos = Math.max(0, Math.min(yPos, rect.height));
+
+    setCurrentSaturation(Math.round((xPos / rect.width) * 100));
+    setCurrentValue(Math.round(100 - (yPos / rect.height) * 100));
   };
-  
-  const handleSvPickerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+
+  const handleSvInteractionStart = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     if (!svPickerRef.current) return;
+    if (e.nativeEvent instanceof TouchEvent) {
+      e.preventDefault(); // Prevent page scroll on touch
+    }
     const rect = svPickerRef.current.getBoundingClientRect();
-    updateSvFromEvent(e, rect);
+    updateSvFromEvent(e.nativeEvent, rect);
 
-    const onMouseMove = (moveEvent: MouseEvent) => updateSvFromEvent(moveEvent, rect);
-    const onMouseUp = () => {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
+    const handleMove = (moveEvent: MouseEvent | TouchEvent) => {
+      if (moveEvent instanceof TouchEvent) {
+        moveEvent.preventDefault();
+      }
+      updateSvFromEvent(moveEvent, rect);
     };
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+
+    const handleEnd = () => {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleEnd);
+      document.removeEventListener('touchmove', handleMove);
+      document.removeEventListener('touchend', handleEnd);
+    };
+
+    if (e.type === 'mousedown') {
+      document.addEventListener('mousemove', handleMove);
+      document.addEventListener('mouseup', handleEnd);
+    } else if (e.type === 'touchstart') {
+      document.addEventListener('touchmove', handleMove);
+      document.addEventListener('touchend', handleEnd);
+    }
   };
 
-
-  const updateHueFromEvent = (e: MouseEvent | React.MouseEvent<HTMLDivElement>, rect: DOMRect) => {
-    let y = e.clientY - rect.top;
-    y = Math.max(0, Math.min(y, rect.height));
-    setCurrentHue(Math.round((y / rect.height) * 360));
+  // --- Hue Slider Interaction ---
+  const updateHueFromEvent = (event: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent, rect: DOMRect) => {
+    const { y: clientY } = getPointerCoordinates(event);
+    let yPos = clientY - rect.top;
+    yPos = Math.max(0, Math.min(yPos, rect.height));
+    setCurrentHue(Math.round((yPos / rect.height) * 360));
   };
 
-  const handleHueSliderMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleHueInteractionStart = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     if (!hueSliderRef.current) return;
+     if (e.nativeEvent instanceof TouchEvent) {
+      e.preventDefault();
+    }
     const rect = hueSliderRef.current.getBoundingClientRect();
-    updateHueFromEvent(e, rect);
+    updateHueFromEvent(e.nativeEvent, rect);
 
-    const onMouseMove = (moveEvent: MouseEvent) => updateHueFromEvent(moveEvent, rect);
-    const onMouseUp = () => {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
+    const handleMove = (moveEvent: MouseEvent | TouchEvent) => {
+      if (moveEvent instanceof TouchEvent) {
+        moveEvent.preventDefault();
+      }
+      updateHueFromEvent(moveEvent, rect);
     };
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+
+    const handleEnd = () => {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleEnd);
+      document.removeEventListener('touchmove', handleMove);
+      document.removeEventListener('touchend', handleEnd);
+    };
+
+    if (e.type === 'mousedown') {
+      document.addEventListener('mousemove', handleMove);
+      document.addEventListener('mouseup', handleEnd);
+    } else if (e.type === 'touchstart') {
+      document.addEventListener('touchmove', handleMove);
+      document.addEventListener('touchend', handleEnd);
+    }
   };
 
 
@@ -216,22 +283,22 @@ export default function PenSettingsToolbar({
 
   const handleDialogClose = (open: boolean) => {
     if (!open) {
-      // Reset to initial state of dialog if cancelled
+      // On cancel/close, revert to the color that was active when dialog opened
+      setCurrentHexInput(initialColorDialog);
       const rgb = hexToRgb(initialColorDialog);
       if (rgb) {
         const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
         setCurrentHue(hsv.h);
         setCurrentSaturation(hsv.s);
         setCurrentValue(hsv.v);
-        setCurrentHexInput(initialColorDialog);
       }
     }
     setIsColorPickerDialogOpen(open);
   }
 
-  const svPickerWidth = svPickerRef.current?.offsetWidth || 150;
-  const svPickerHeight = svPickerRef.current?.offsetHeight || 150;
-  const hueSliderHeight = hueSliderRef.current?.offsetHeight || 150;
+  const svPickerWidth = svPickerRef.current?.clientWidth || 150; // Use clientWidth for actual rendered width
+  const svPickerHeight = svPickerRef.current?.clientHeight || 150;
+  const hueSliderHeight = hueSliderRef.current?.clientHeight || 150;
 
   const svHandleX = (currentSaturation / 100) * svPickerWidth;
   const svHandleY = (1 - currentValue / 100) * svPickerHeight;
@@ -309,32 +376,34 @@ export default function PenSettingsToolbar({
                     {/* SV Picker */}
                     <div
                       ref={svPickerRef}
-                      className="relative w-[150px] h-[150px] cursor-crosshair rounded-sm overflow-hidden border"
+                      className="relative w-[150px] h-[150px] cursor-crosshair rounded-sm overflow-hidden border touch-none" // Added touch-none
                       style={{ backgroundColor: `hsl(${currentHue}, 100%, 50%)` }}
-                      onMouseDown={handleSvPickerMouseDown}
+                      onMouseDown={handleSvInteractionStart}
+                      onTouchStart={handleSvInteractionStart}
                     >
                       <div className="absolute inset-0 w-full h-full" style={{ background: 'linear-gradient(to right, white, transparent)' }} />
                       <div className="absolute inset-0 w-full h-full" style={{ background: 'linear-gradient(to top, black, transparent)' }} />
                       <div
                         className="absolute w-3 h-3 rounded-full border-2 border-white shadow-md transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-                        style={{ 
-                            left: `${Math.min(svPickerWidth, Math.max(0,svHandleX))}px`, 
-                            top: `${Math.min(svPickerHeight, Math.max(0, svHandleY))}px`, 
-                            backgroundColor: currentHexInput 
+                        style={{
+                            left: `${Math.min(svPickerWidth, Math.max(0,svHandleX))}px`,
+                            top: `${Math.min(svPickerHeight, Math.max(0, svHandleY))}px`,
+                            backgroundColor: currentHexInput
                         }}
                       />
                     </div>
                     {/* Hue Slider */}
                     <div
                       ref={hueSliderRef}
-                      className="relative w-[20px] h-[150px] cursor-pointer rounded-sm overflow-hidden border"
+                      className="relative w-[20px] h-[150px] cursor-pointer rounded-sm overflow-hidden border touch-none" // Added touch-none
                       style={{ background: 'linear-gradient(to bottom, #FF0000, #FFFF00, #00FF00, #00FFFF, #0000FF, #FF00FF, #FF0000)' }}
-                      onMouseDown={handleHueSliderMouseDown}
+                      onMouseDown={handleHueInteractionStart}
+                      onTouchStart={handleHueInteractionStart}
                     >
                        <div
                         className="absolute w-full h-1.5 border-y border-gray-600 bg-white/50 shadow-md transform -translate-y-1/2 pointer-events-none"
-                        style={{ 
-                            left: 0, 
+                        style={{
+                            left: 0,
                             top: `${Math.min(hueSliderHeight, Math.max(0,hueHandleY))}px`
                         }}
                       />
@@ -381,9 +450,9 @@ export default function PenSettingsToolbar({
                 <div
                   className="bg-foreground rounded-full"
                   style={{
-                    height: `${Math.min(Math.max(width, 2), 16)}px`, // Ensure reasonable size
+                    height: `${Math.min(Math.max(width, 2), 16)}px`,
                     width: `${Math.min(Math.max(width, 2), 16)}px`,
-                    minHeight: '4px', // Keep a minimum visible size
+                    minHeight: '4px',
                     minWidth: '4px',
                   }}
                 />
@@ -395,4 +464,3 @@ export default function PenSettingsToolbar({
     </div>
   );
 }
-
