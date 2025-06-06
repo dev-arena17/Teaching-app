@@ -3,10 +3,10 @@
 
 import * as React from "react";
 import PageHeader from '@/components/page-header';
-import ActivePageView from '@/components/active-page-view'; // Renamed from ImageGrid
+import ActivePageView from '@/components/active-page-view';
 import BottomToolbar from '@/components/bottom-toolbar';
-import PageThumbnailSidebar from "@/components/page-thumbnail-sidebar"; // New component
-import type { Page } from "@/lib/types"; // Will create this type definition
+import PageThumbnailSidebar from "@/components/page-thumbnail-sidebar";
+import type { Page } from "@/lib/types";
 
 export default function DocumentEditorPage() {
   const [pages, setPages] = React.useState<Page[]>([
@@ -19,22 +19,21 @@ export default function DocumentEditorPage() {
 
   const handlePageSelect = (index: number) => {
     setCurrentPageIndex(index);
-    setIsThumbnailSidebarOpen(false); // Close sidebar on selection
+    setIsThumbnailSidebarOpen(false); 
   };
 
   const handleAddBlankPage = () => {
     const newPageId = (pages.length + 1).toString();
     const newPage: Page = {
       id: newPageId,
-      // For a true blank page, src might be undefined or a special marker
-      src: `https://placehold.co/800x600.png?text=Blank+Page+${newPageId}`,
+      src: undefined, // Mark as blank
       alt: `Page ${newPageId}`,
       hint: 'blank page',
-      type: 'image', // Or 'blank'
+      type: 'blank', 
     };
     setPages([...pages, newPage]);
-    setCurrentPageIndex(pages.length); // Select the new page
-    setIsThumbnailSidebarOpen(true); // Keep sidebar open or open if closed
+    setCurrentPageIndex(pages.length); 
+    setIsThumbnailSidebarOpen(true); 
   };
 
   const toggleThumbnailSidebar = () => {
@@ -73,3 +72,4 @@ export default function DocumentEditorPage() {
     </div>
   );
 }
+    
