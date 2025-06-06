@@ -41,7 +41,15 @@ export default function PageThumbnailSidebar({
           <div className="flex justify-between items-center">
             <SheetTitle>Pages</SheetTitle>
             <SheetClose asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8"
+                onClick={() => {
+                  onAddBlankPage();
+                  // The SheetClose mechanism will still handle closing the sheet
+                }}
+              >
                 <X className="h-4 w-4" />
               </Button>
             </SheetClose>
