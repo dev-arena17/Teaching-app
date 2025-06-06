@@ -31,7 +31,7 @@ import {
   CopyPlus,
   Undo2,
   ImageUp,
-  Video, // Changed from VideoUp
+  Video,
   Camera,
   FileUp,
   FilePlus2,
@@ -39,7 +39,11 @@ import {
   Trash2,
 } from "lucide-react";
 
-export default function BottomToolbar() {
+interface BottomToolbarProps {
+  onAddBlankPage: () => void; // Added prop
+}
+
+export default function BottomToolbar({ onAddBlankPage }: BottomToolbarProps) {
   const activeTool = "pen";
   const { toast } = useToast();
 
@@ -77,18 +81,16 @@ export default function BottomToolbar() {
             title: "Camera Access Denied",
             description: "Please enable camera permissions in your browser settings.",
           });
-          setIsTakePhotoDialogOpen(false); // Close dialog if permission denied
+          setIsTakePhotoDialogOpen(false); 
         }
       };
       getCameraPermission();
     } else {
-      // Cleanup: stop camera stream when dialog is closed
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach((track) => track.stop());
         videoRef.current.srcObject = null;
       }
-      // No need to reset permission status here, it's handled by the initial state or error state
     }
   }, [isTakePhotoDialogOpen, toast]);
 
@@ -107,10 +109,7 @@ export default function BottomToolbar() {
     toast({ title: "Import File", description: "Functionality to import PDF/PPT will be implemented here." });
   };
 
-  const handleAddBlankPage = () => {
-    console.log("Add Blank Page clicked");
-    toast({ title: "Add Blank Page", description: "Functionality to add a blank page will be implemented here." });
-  };
+  // Removed handleAddBlankPage from here as it's now passed as a prop
 
   const handleCopyPage = () => {
     console.log("Copy Page clicked");
@@ -144,7 +143,6 @@ export default function BottomToolbar() {
     }
   };
 
-
   return (
     <footer className="bg-background p-3 sticky bottom-0 z-10 border-t">
       <div className="flex justify-center items-center">
@@ -167,7 +165,7 @@ export default function BottomToolbar() {
 
           <Dialog open={isTakePhotoDialogOpen} onOpenChange={(open) => {
             setIsTakePhotoDialogOpen(open);
-            if (!open) { // If dialog is closing, reset camera permission state for next open
+            if (!open) {
                  if (videoRef.current && videoRef.current.srcObject) {
                     const stream = videoRef.current.srcObject as MediaStream;
                     stream.getTracks().forEach((track) => track.stop());
@@ -193,11 +191,11 @@ export default function BottomToolbar() {
                   <span>Upload Image</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleUploadVideo}>
-                  <Video className="mr-2 h-4 w-4" /> {/* Changed from VideoUp */}
+                  <Video className="mr-2 h-4 w-4" />
                   <span>Upload Video</span>
                 </DropdownMenuItem>
                 <DialogTrigger asChild>
-                  <DropdownMenuItem onSelect={() => setHasCameraPermission(null)}> {/* Reset on open attempt */}
+                  <DropdownMenuItem onSelect={() => setHasCameraPermission(null)}>
                     <Camera className="mr-2 h-4 w-4" />
                     <span>Take Photo</span>
                   </DropdownMenuItem>
@@ -207,7 +205,7 @@ export default function BottomToolbar() {
                   <span>Import File (PDF/PPT)</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleAddBlankPage}>
+                <DropdownMenuItem onClick={onAddBlankPage}> {/* Changed to use prop */}
                   <FilePlus2 className="mr-2 h-4 w-4" />
                   <span>Add Blank Page</span>
                 </DropdownMenuItem>
@@ -238,7 +236,7 @@ export default function BottomToolbar() {
                     </AlertDescription>
                   </Alert>
                 )}
-                 {hasCameraPermission === null && !videoRef.current?.srcObject && ( // Show only if camera is not already active
+                 {hasCameraPermission === null && !videoRef.current?.srcObject && (
                   <div className="absolute inset-0 w-full aspect-video rounded-md bg-muted flex items-center justify-center">
                     <p className="text-muted-foreground">Initializing camera...</p>
                   </div>
@@ -269,3 +267,4 @@ export default function BottomToolbar() {
     </footer>
   );
 }
+
