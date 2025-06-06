@@ -10,16 +10,15 @@ import type { Page } from "@/lib/types";
 
 export default function DocumentEditorPage() {
   const [pages, setPages] = React.useState<Page[]>([
-    { id: '1', src: 'https://placehold.co/800x600.png', alt: 'Page 1', hint: 'document page', type: 'image' },
-    { id: '2', src: 'https://placehold.co/800x600.png', alt: 'Page 2', hint: 'notes', type: 'image' },
-    { id: '3', src: 'https://placehold.co/800x600.png', alt: 'Page 3', hint: 'diagram', type: 'image' },
+    // Start with one blank page
+    { id: '1', src: undefined, alt: 'Page 1', hint: 'blank page', type: 'blank' },
   ]);
   const [currentPageIndex, setCurrentPageIndex] = React.useState(0);
   const [isThumbnailSidebarOpen, setIsThumbnailSidebarOpen] = React.useState(false);
 
   const handlePageSelect = (index: number) => {
     setCurrentPageIndex(index);
-    setIsThumbnailSidebarOpen(false); 
+    setIsThumbnailSidebarOpen(false);
   };
 
   const handleAddBlankPage = () => {
@@ -29,11 +28,11 @@ export default function DocumentEditorPage() {
       src: undefined, // Mark as blank
       alt: `Page ${newPageId}`,
       hint: 'blank page',
-      type: 'blank', 
+      type: 'blank',
     };
     setPages([...pages, newPage]);
-    setCurrentPageIndex(pages.length); 
-    setIsThumbnailSidebarOpen(true); 
+    setCurrentPageIndex(pages.length);
+    setIsThumbnailSidebarOpen(true);
   };
 
   const toggleThumbnailSidebar = () => {
