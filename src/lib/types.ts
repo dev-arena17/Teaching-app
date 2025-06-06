@@ -5,5 +5,17 @@ export interface Page {
   alt: string;
   hint: string;
   type: 'image' | 'video' | 'pdf_page' | 'blank' | 'text'; // Extend as needed
-  // Add other page-specific properties here, e.g., content for text type
+  drawingData?: DrawingPath[]; // Store drawing data for each page
+}
+
+export interface DrawingPoint {
+  x: number;
+  y: number;
+}
+
+export interface DrawingPath {
+  color: string;
+  strokeWidth: number;
+  points: DrawingPoint[];
+  isHighlighter?: boolean;
 }

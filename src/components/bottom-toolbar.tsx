@@ -31,7 +31,7 @@ import {
   CopyPlus,
   Undo2,
   ImageUp,
-  Video,
+  Video, // Corrected from VideoUp
   Camera,
   FileUp,
   FilePlus2,
@@ -40,16 +40,40 @@ import {
 } from "lucide-react";
 
 interface BottomToolbarProps {
-  onAddBlankPage: () => void; // Added prop
+  onAddBlankPage: () => void;
+  activeToolId: string | null;
+  setActiveToolId: (toolId: string | null) => void;
+  isPenSettingsOpen: boolean;
+  setIsPenSettingsOpen: (isOpen: boolean) => void;
 }
 
-export default function BottomToolbar({ onAddBlankPage }: BottomToolbarProps) {
-  const activeTool = "pen";
+export default function BottomToolbar({
+  onAddBlankPage,
+  activeToolId,
+  setActiveToolId,
+  isPenSettingsOpen,
+  setIsPenSettingsOpen,
+}: BottomToolbarProps) {
   const { toast } = useToast();
 
   const [isTakePhotoDialogOpen, setIsTakePhotoDialogOpen] = React.useState(false);
   const [hasCameraPermission, setHasCameraPermission] = React.useState<boolean | null>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
+
+  const handleToolClick = (toolId: string) => {
+    if (toolId === 'pen') {
+      if (activeToolId === 'pen') { // If pen tool is already active, clicking it again toggles settings
+        setIsPenSettingsOpen(!isPenSettingsOpen);
+      } else {
+        setActiveToolId('pen');
+        setIsPenSettingsOpen(true); // Open settings when pen tool is newly selected
+      }
+    } else {
+      setActiveToolId(activeToolId === toolId ? null : toolId); // Toggle other tools
+      setIsPenSettingsOpen(false); // Close pen settings if another tool is selected
+    }
+  };
+
 
   const baseTools = [
     { id: "send", icon: Send, label: "Send" },
@@ -81,7 +105,7 @@ export default function BottomToolbar({ onAddBlankPage }: BottomToolbarProps) {
             title: "Camera Access Denied",
             description: "Please enable camera permissions in your browser settings.",
           });
-          setIsTakePhotoDialogOpen(false); 
+          setIsTakePhotoDialogOpen(false);
         }
       };
       getCameraPermission();
@@ -109,8 +133,6 @@ export default function BottomToolbar({ onAddBlankPage }: BottomToolbarProps) {
     toast({ title: "Import File", description: "Functionality to import PDF/PPT will be implemented here." });
   };
 
-  // Removed handleAddBlankPage from here as it's now passed as a prop
-
   const handleCopyPage = () => {
     console.log("Copy Page clicked");
     toast({ title: "Copy Page", description: "Functionality to copy the current page will be implemented here." });
@@ -130,7 +152,7 @@ export default function BottomToolbar({ onAddBlankPage }: BottomToolbarProps) {
       if (context) {
         context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL('image/png');
-        console.log("Photo captured:", dataUrl.substring(0,50) + "..."); 
+        console.log("Photo captured:", dataUrl.substring(0,50) + "...");
         toast({ title: "Photo Captured", description: "Photo captured successfully! (See console for Data URL)" });
         setIsTakePhotoDialogOpen(false);
       }
@@ -144,20 +166,21 @@ export default function BottomToolbar({ onAddBlankPage }: BottomToolbarProps) {
   };
 
   return (
-    <footer className="bg-background p-3 sticky bottom-0 z-10 border-t">
+    <footer className="bg-background p-3 sticky bottom-0 z-20 border-t"> {/* Increased z-index */}
       <div className="flex justify-center items-center">
         <div className="bg-card py-1 px-2 rounded-full shadow-lg flex items-center gap-1">
           {baseTools.map((tool) => (
             <Button
               key={tool.id}
-              variant={activeTool === tool.id ? "default" : "ghost"}
+              variant={activeToolId === tool.id ? "default" : "ghost"}
               size="icon"
               className={`h-10 w-10 rounded-full ${
-                activeTool === tool.id
+                activeToolId === tool.id
                   ? "bg-accent text-accent-foreground hover:bg-accent/90"
                   : "text-foreground/70 hover:bg-accent hover:text-accent-foreground"
               }`}
               aria-label={tool.label}
+              onClick={() => handleToolClick(tool.id)}
             >
               <tool.icon className="h-5 w-5" />
             </Button>
@@ -205,7 +228,7 @@ export default function BottomToolbar({ onAddBlankPage }: BottomToolbarProps) {
                   <span>Import File (PDF/PPT)</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onAddBlankPage}> {/* Changed to use prop */}
+                <DropdownMenuItem onClick={onAddBlankPage}>
                   <FilePlus2 className="mr-2 h-4 w-4" />
                   <span>Add Blank Page</span>
                 </DropdownMenuItem>
@@ -258,6 +281,10 @@ export default function BottomToolbar({ onAddBlankPage }: BottomToolbarProps) {
               size="icon"
               className="h-10 w-10 rounded-full text-foreground/70 hover:bg-accent hover:text-accent-foreground"
               aria-label={tool.label}
+              onClick={() => {
+                console.log(`${tool.label} clicked`);
+                toast({ title: tool.label, description: "Functionality to be implemented." });
+              }}
             >
               <tool.icon className="h-5 w-5" />
             </Button>
@@ -267,4 +294,3 @@ export default function BottomToolbar({ onAddBlankPage }: BottomToolbarProps) {
     </footer>
   );
 }
-
