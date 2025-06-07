@@ -10,13 +10,15 @@ interface ActivePageViewProps {
   page: Page;
   penColor: string;
   penStrokeWidth: number;
-  eraserSize: number; // New prop for eraser size
+  eraserSize: number;
   activeToolId: string | null;
   onDrawingChange: (drawingData: DrawingPath[]) => void;
   isPenActive: boolean;
   isHighlighterActive: boolean;
-  isEraserActive: boolean; // New prop
+  isEraserActive: boolean;
 }
+
+const ERASER_PATH_COLOR = 'ERASER_PATH_MARKER'; // Special identifier for eraser paths
 
 export default function ActivePageView({
   page,
@@ -31,7 +33,7 @@ export default function ActivePageView({
 }: ActivePageViewProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const transformContainerRef = React.useRef<HTMLDivElement>(null);
-  const [isInteracting, setIsInteracting] = React.useState(false); // Combined state for drawing/erasing
+  const [isInteracting, setIsInteracting] = React.useState(false);
   const [paths, setPaths] = React.useState<DrawingPath[]>(page.drawingData || []);
 
   const [zoom, setZoom] = React.useState(1);
@@ -53,8 +55,6 @@ export default function ActivePageView({
 
     const parent = canvas.parentElement?.parentElement;
     if (parent) {
-        // Set canvas physical dimensions once based on parent (unscaled)
-        // This ensures drawing resolution remains consistent
         if (canvas.width !== parent.offsetWidth || canvas.height !== parent.offsetHeight) {
             canvas.width = parent.offsetWidth;
             canvas.height = parent.offsetHeight;
@@ -62,15 +62,26 @@ export default function ActivePageView({
     }
 
     context.clearRect(0, 0, canvas.width, canvas.height);
+    
     paths.forEach(pathObj => {
       context.beginPath();
-      context.strokeStyle = pathObj.color;
-      context.lineWidth = pathObj.strokeWidth; // Logical stroke width
-      context.globalAlpha = pathObj.isHighlighter ? 0.3 : 1.0;
       context.lineCap = 'round';
       context.lineJoin = 'round';
+
+      if (pathObj.color === ERASER_PATH_COLOR) {
+        context.globalCompositeOperation = 'destination-out';
+        context.lineWidth = pathObj.strokeWidth; // Use eraserSize stored in path
+        // For destination-out, strokeStyle color doesn't matter, only alpha.
+        // But to be explicit, we can set it to an opaque color.
+        context.strokeStyle = 'rgba(0,0,0,1)'; 
+      } else {
+        context.globalCompositeOperation = 'source-over';
+        context.strokeStyle = pathObj.color;
+        context.lineWidth = pathObj.strokeWidth;
+        context.globalAlpha = pathObj.isHighlighter ? 0.3 : 1.0;
+      }
+      
       pathObj.points.forEach((point: DrawingPoint, index: number) => {
-        // Denormalize points for rendering on the fixed-size canvas
         const x = point.x * canvas.width;
         const y = point.y * canvas.height;
         if (index === 0) {
@@ -80,28 +91,27 @@ export default function ActivePageView({
         }
       });
       context.stroke();
+      
+      // Reset globalAlpha and globalCompositeOperation after each path to defaults for the next one
+      context.globalAlpha = 1.0;
+      context.globalCompositeOperation = 'source-over';
     });
-    context.globalAlpha = 1.0;
 
-  }, [paths, page.id]); // Removed dependencies that don't affect canvas redrawing directly
+  }, [paths, page.id]); 
 
   const getPointerPositionOnCanvas = (event: React.MouseEvent | React.TouchEvent): DrawingPoint | null => {
     const canvas = canvasRef.current;
     if (!canvas || !transformContainerRef.current) return null;
 
-    const { clientX, clientY } = getPointerPosition(event as React.MouseEvent); // Native clientX/Y
-    const canvasRect = canvas.getBoundingClientRect(); // This is the *visual* rect of the canvas on screen
+    const { clientX, clientY } = getPointerPosition(event as React.MouseEvent);
+    const canvasRect = canvas.getBoundingClientRect(); 
 
-    // Pointer position relative to the visual canvas element
     const pointerXOnVisualCanvas = clientX - canvasRect.left;
     const pointerYOnVisualCanvas = clientY - canvasRect.top;
     
-    // To get position on the logical, unscaled canvas, we divide by zoom
-    // The canvas itself is not scaled, its parent is. So these coordinates are relative to the 0,0 of the canvas element itself.
     const logicalX = pointerXOnVisualCanvas / zoom;
     const logicalY = pointerYOnVisualCanvas / zoom;
 
-    // Normalize coordinates (0-1 range) based on logical canvas dimensions
     const normX = logicalX / canvas.width;
     const normY = logicalY / canvas.height;
 
@@ -122,19 +132,23 @@ export default function ActivePageView({
       if (!pos) return;
 
       setIsInteracting(true);
+      let newPath: DrawingPath;
       if (isPenActive || isHighlighterActive) {
-        const newPath: DrawingPath = {
+        newPath = {
           color: penColor,
           strokeWidth: penStrokeWidth,
           isHighlighter: isHighlighterActive,
           points: [pos]
         };
-        setPaths(prevPaths => [...prevPaths, newPath]);
-      } else if (isEraserActive) {
-        // Eraser starts modifying paths in the 'interact' function
-        interact(event as React.MouseEvent);
+      } else { // isEraserActive
+        newPath = {
+          color: ERASER_PATH_COLOR, // Special marker for eraser paths
+          strokeWidth: eraserSize,
+          points: [pos]
+        };
       }
-    } else { // Start Panning
+      setPaths(prevPaths => [...prevPaths, newPath]);
+    } else { 
       const { clientX, clientY } = getPointerPosition(event as React.MouseEvent);
       setIsPanning(true);
       setLastPanPosition({ x: clientX, y: clientY });
@@ -142,8 +156,7 @@ export default function ActivePageView({
   };
 
   const interact = (event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-    if (!isInteracting) return;
-    if (isPanning) { // Handle Panning
+    if (isPanning) { 
         const { clientX, clientY } = getPointerPosition(event as React.MouseEvent);
         const dx = clientX - lastPanPosition.x;
         const dy = clientY - lastPanPosition.y;
@@ -152,46 +165,27 @@ export default function ActivePageView({
         return;
     }
 
+    if (!isInteracting) return;
 
     const pos = getPointerPositionOnCanvas(event as React.MouseEvent);
     if (!pos) return;
 
-    if (isPenActive || isHighlighterActive) {
-      setPaths(prevPaths => {
-        const updatedPaths = [...prevPaths];
-        const currentPath = updatedPaths[updatedPaths.length - 1];
-        if (currentPath) {
-          currentPath.points.push(pos);
-        }
-        return updatedPaths;
-      });
-    } else if (isEraserActive) {
-      setPaths(prevPaths => {
-        const canvas = canvasRef.current;
-        if (!canvas) return prevPaths;
-
-        // Eraser size in normalized terms (relative to canvas width for simplicity)
-        // This makes the eraser effect scale with zoom.
-        const normalizedEraserRadius = (eraserSize / 2) / canvas.width;
-
-        return prevPaths.filter(pathObj => {
-          for (const point of pathObj.points) {
-            const distance = Math.sqrt(Math.pow(point.x - pos.x, 2) + Math.pow(point.y - pos.y, 2));
-            if (distance < normalizedEraserRadius + (pathObj.strokeWidth / (2 * canvas.width)) ) { // consider path stroke width too
-              return false; // Remove this path
-            }
-          }
-          return true; // Keep this path
-        });
-      });
-    }
+    // For pen, highlighter, and eraser, we add points to the current path
+    setPaths(prevPaths => {
+      const updatedPaths = [...prevPaths];
+      const currentPath = updatedPaths[updatedPaths.length - 1];
+      if (currentPath) {
+        currentPath.points.push(pos);
+      }
+      return updatedPaths;
+    });
   };
 
   const stopInteraction = () => {
     if (isInteracting) {
         setIsInteracting(false);
         if (isPenActive || isHighlighterActive || isEraserActive) {
-            onDrawingChange(paths); // Persist changes
+            onDrawingChange(paths); 
         }
     }
     if (isPanning) {
@@ -253,7 +247,6 @@ export default function ActivePageView({
             className="h-full w-full origin-top-left"
             style={{
               transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-              // Cursor style is now on the parent div
             }}
           >
             {page.type === 'blank' || !page.src ? (
@@ -264,15 +257,14 @@ export default function ActivePageView({
               <Image
                 src={page.src}
                 alt={page.alt}
-                layout="fill"
-                objectFit="contain"
+                fill // Changed from layout="fill" objectFit="contain" for Next 13+
+                style={{objectFit: "contain"}} // For Next 13+
                 className="w-full h-full"
                 data-ai-hint={page.hint}
                 priority={true}
                 draggable={false}
               />
             )}
-            {/* Canvas is NOT scaled directly. Its parent is. Canvas draws at its native resolution. */}
             <canvas
               ref={canvasRef}
               className="absolute top-0 left-0 w-full h-full touch-none"
@@ -284,3 +276,5 @@ export default function ActivePageView({
     </div>
   );
 }
+
+    
