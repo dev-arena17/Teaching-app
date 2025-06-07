@@ -45,8 +45,9 @@ interface BottomToolbarProps {
   setActiveToolId: (toolId: string | null) => void;
   isPenSettingsOpen: boolean;
   setIsPenSettingsOpen: (isOpen: boolean) => void;
-  isEraserSettingsOpen: boolean; // New prop
-  setIsEraserSettingsOpen: (isOpen: boolean) => void; // New prop
+  isEraserSettingsOpen: boolean;
+  setIsEraserSettingsOpen: (isOpen: boolean) => void;
+  onImageUploaded: (imageDataUrl: string) => void; // New prop
 }
 
 export default function BottomToolbar({
@@ -57,8 +58,10 @@ export default function BottomToolbar({
   setIsPenSettingsOpen,
   isEraserSettingsOpen,
   setIsEraserSettingsOpen,
+  onImageUploaded, // Destructure new prop
 }: BottomToolbarProps) {
   const { toast } = useToast();
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [isTakePhotoDialogOpen, setIsTakePhotoDialogOpen] = React.useState(false);
   const [hasCameraPermission, setHasCameraPermission] = React.useState<boolean | null>(null);
@@ -71,7 +74,7 @@ export default function BottomToolbar({
       } else {
         setActiveToolId('pen');
         setIsPenSettingsOpen(true);
-        setIsEraserSettingsOpen(false); // Close eraser settings if pen is selected
+        setIsEraserSettingsOpen(false);
       }
     } else if (toolId === 'eraser') {
       if (activeToolId === 'eraser') {
@@ -79,7 +82,7 @@ export default function BottomToolbar({
       } else {
         setActiveToolId('eraser');
         setIsEraserSettingsOpen(true);
-        setIsPenSettingsOpen(false); // Close pen settings if eraser is selected
+        setIsPenSettingsOpen(false);
       }
     } else {
       setActiveToolId(activeToolId === toolId ? null : toolId);
@@ -88,14 +91,13 @@ export default function BottomToolbar({
     }
   };
 
-
   const baseTools = [
     { id: "send", icon: Send, label: "Send" },
     { id: "pen", icon: PenTool, label: "Pen" },
     { id: "shapes", icon: Shapes, label: "Shapes" },
     { id: "type", icon: Type, label: "Text" },
     { id: "fx", icon: Sigma, label: "Function" },
-    { id: "eraser", icon: Eraser, label: "Eraser" }, // Added Eraser
+    { id: "eraser", icon: Eraser, label: "Eraser" },
   ];
 
   const pageOperationTools = [
@@ -132,8 +134,31 @@ export default function BottomToolbar({
     }
   }, [isTakePhotoDialogOpen, toast]);
 
-  const handleUploadImage = () => {
-    toast({ title: "Upload Image", description: "Functionality to upload image will be implemented here." });
+  const handleImageFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          onImageUploaded(reader.result);
+          toast({ title: "Image Uploaded", description: "The image has been added as a new page." });
+        } else {
+          toast({ variant: "destructive", title: "Upload Failed", description: "Could not read image file."});
+        }
+      };
+      reader.onerror = () => {
+        toast({ variant: "destructive", title: "Upload Failed", description: "Error reading image file."});
+      }
+      reader.readAsDataURL(file);
+    }
+    // Reset file input value to allow uploading the same file again if needed
+    if (event.target) {
+        event.target.value = '';
+    }
+  };
+
+  const triggerImageUpload = () => {
+    fileInputRef.current?.click();
   };
 
   const handleUploadVideo = () => {
@@ -161,8 +186,10 @@ export default function BottomToolbar({
       if (context) {
         context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL('image/png');
-        console.log("Photo captured:", dataUrl.substring(0,50) + "..."); // Keep for debugging if needed
-        toast({ title: "Photo Captured", description: "Photo captured successfully!" });
+        // Call onImageUploaded for consistency, if you want photos to also create new pages.
+        // For now, just a toast as per original behavior for photo capture.
+        onImageUploaded(dataUrl); // Assuming captured photos should also be added as pages
+        toast({ title: "Photo Captured & Added", description: "Photo added as a new page." });
         setIsTakePhotoDialogOpen(false);
       }
     } else {
@@ -176,6 +203,13 @@ export default function BottomToolbar({
 
   return (
     <footer className="bg-background p-3 sticky bottom-0 z-20 border-t">
+      <input
+        type="file"
+        accept="image/*"
+        ref={fileInputRef}
+        onChange={handleImageFileSelected}
+        className="hidden"
+      />
       <div className="flex justify-center items-center">
         <div className="bg-card py-1 px-2 rounded-full shadow-lg flex items-center gap-1">
           {baseTools.map((tool) => (
@@ -218,7 +252,7 @@ export default function BottomToolbar({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="center" side="top" className="w-56 mb-2">
-                <DropdownMenuItem onClick={handleUploadImage}>
+                <DropdownMenuItem onClick={triggerImageUpload}>
                   <ImageUp className="mr-2 h-4 w-4" />
                   <span>Upload Image</span>
                 </DropdownMenuItem>

@@ -7,14 +7,13 @@ import ActivePageView from '@/components/active-page-view';
 import BottomToolbar from '@/components/bottom-toolbar';
 import PageThumbnailSidebar from "@/components/page-thumbnail-sidebar";
 import PenSettingsToolbar from "@/components/pen-settings-toolbar";
-import EraserSettingsToolbar from "@/components/eraser-settings-toolbar"; // New import
+import EraserSettingsToolbar from "@/components/eraser-settings-toolbar";
 import type { Page } from "@/lib/types";
 
-// Define default settings
 const DEFAULT_PEN_COLOR = "#EF4444";
 const MIN_PEN_STROKE_WIDTH = 1;
 const MAX_PEN_STROKE_WIDTH = 50;
-const DEFAULT_PEN_STROKE_WIDTH = 5; // Changed from 8
+const DEFAULT_PEN_STROKE_WIDTH = 5;
 const PEN_COLORS = ["#000000", "#EF4444", "#3B82F6", "#22C55E", "#A855F7", "#EAB308"];
 
 const MIN_ERASER_SIZE = 5;
@@ -29,16 +28,13 @@ export default function DocumentEditorPage() {
   const [currentPageIndex, setCurrentPageIndex] = React.useState(0);
   const [isThumbnailSidebarOpen, setIsThumbnailSidebarOpen] = React.useState(false);
 
-  // Tool state
   const [activeToolId, setActiveToolId] = React.useState<string | null>(null);
 
-  // Pen tool state
   const [isPenSettingsOpen, setIsPenSettingsOpen] = React.useState(false);
   const [penColor, setPenColor] = React.useState<string>(DEFAULT_PEN_COLOR);
   const [penStrokeWidth, setPenStrokeWidth] = React.useState<number>(DEFAULT_PEN_STROKE_WIDTH);
   const [activePenSubTool, setActivePenSubTool] = React.useState<'pen' | 'highlighter'>('pen');
 
-  // Eraser tool state
   const [isEraserSettingsOpen, setIsEraserSettingsOpen] = React.useState(false);
   const [eraserSize, setEraserSize] = React.useState<number>(DEFAULT_ERASER_SIZE);
 
@@ -48,8 +44,21 @@ export default function DocumentEditorPage() {
     setIsThumbnailSidebarOpen(false);
   };
 
+  const addNewPage = (newPage: Page, makeActive: boolean = true) => {
+    setPages(prevPages => {
+      const updatedPages = [...prevPages, newPage];
+      if (makeActive) {
+        setCurrentPageIndex(updatedPages.length - 1);
+      }
+      return updatedPages;
+    });
+    if (makeActive) {
+        setIsThumbnailSidebarOpen(true); // Optionally open sidebar when new page is active
+    }
+  };
+
   const handleAddBlankPage = () => {
-    const newPageId = (Date.now()).toString(); // Use timestamp for unique ID
+    const newPageId = (Date.now()).toString();
     const newPage: Page = {
       id: newPageId,
       src: undefined,
@@ -58,12 +67,20 @@ export default function DocumentEditorPage() {
       type: 'blank',
       drawingData: [],
     };
-    setPages(prevPages => {
-      const updatedPages = [...prevPages, newPage];
-      setCurrentPageIndex(updatedPages.length - 1);
-      return updatedPages;
-    });
-    setIsThumbnailSidebarOpen(true);
+    addNewPage(newPage);
+  };
+
+  const handleImageUploaded = (imageDataUrl: string) => {
+    const newPageId = (Date.now()).toString();
+    const newPage: Page = {
+      id: newPageId,
+      src: imageDataUrl,
+      alt: `Uploaded Image ${pages.length + 1}`,
+      hint: 'uploaded image',
+      type: 'image',
+      drawingData: [],
+    };
+    addNewPage(newPage);
   };
 
   const toggleThumbnailSidebar = () => {
@@ -82,7 +99,7 @@ export default function DocumentEditorPage() {
 
   const handleEraseAll = () => {
     if (pages[currentPageIndex]) {
-      handleDrawingChange([]); // Set drawing data to empty array for current page
+      handleDrawingChange([]); 
     }
   };
 
@@ -160,6 +177,7 @@ export default function DocumentEditorPage() {
         setIsPenSettingsOpen={setIsPenSettingsOpen}
         isEraserSettingsOpen={isEraserSettingsOpen}
         setIsEraserSettingsOpen={setIsEraserSettingsOpen}
+        onImageUploaded={handleImageUploaded}
       />
     </div>
   );
