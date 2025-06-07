@@ -1,6 +1,12 @@
+
 // Import the functions you need from the SDKs you need
 import { initializeApp, getApp, getApps } from "firebase/app";
+import { getAuth } from "firebase/auth"; // Import getAuth
 import { getAnalytics, isSupported } from "firebase/analytics";
+
+// --- DIAGNOSTIC LOG ---
+console.log("Attempting to read Firebase API Key:", process.env.NEXT_PUBLIC_FIREBASE_API_KEY);
+// --- END DIAGNOSTIC LOG ---
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -22,6 +28,8 @@ if (!getApps().length) {
   app = getApp();
 }
 
+const auth = getAuth(app); // Initialize Auth
+
 let analytics;
 if (typeof window !== 'undefined') {
   isSupported().then((supported) => {
@@ -31,4 +39,4 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export { app, analytics, firebaseConfig };
+export { app, auth, analytics, firebaseConfig }; // Export auth
