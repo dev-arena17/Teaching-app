@@ -53,7 +53,7 @@ export default function DocumentEditorPage() {
       return updatedPages;
     });
     if (makeActive) {
-        setIsThumbnailSidebarOpen(true); 
+        setIsThumbnailSidebarOpen(true);
     }
   };
 
@@ -99,7 +99,7 @@ export default function DocumentEditorPage() {
 
   const handleEraseAll = () => {
     if (pages[currentPageIndex]) {
-      handleDrawingChange([]); 
+      handleDrawingChange([]);
     }
   };
 
