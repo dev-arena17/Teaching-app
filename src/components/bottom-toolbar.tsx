@@ -7,7 +7,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -34,31 +33,26 @@ import {
   Video,
   Camera,
   FileUp,
-  FilePlus2,
-  Copy,
-  Trash2,
 } from "lucide-react";
 
 interface BottomToolbarProps {
-  onAddBlankPage: () => void;
   activeToolId: string | null;
   setActiveToolId: (toolId: string | null) => void;
   isPenSettingsOpen: boolean;
   setIsPenSettingsOpen: (isOpen: boolean) => void;
   isEraserSettingsOpen: boolean;
   setIsEraserSettingsOpen: (isOpen: boolean) => void;
-  onImageUploaded: (imageDataUrl: string) => void; // New prop
+  onImageUploaded: (imageDataUrl: string) => void;
 }
 
 export default function BottomToolbar({
-  onAddBlankPage,
   activeToolId,
   setActiveToolId,
   isPenSettingsOpen,
   setIsPenSettingsOpen,
   isEraserSettingsOpen,
   setIsEraserSettingsOpen,
-  onImageUploaded, // Destructure new prop
+  onImageUploaded,
 }: BottomToolbarProps) {
   const { toast } = useToast();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -151,7 +145,6 @@ export default function BottomToolbar({
       }
       reader.readAsDataURL(file);
     }
-    // Reset file input value to allow uploading the same file again if needed
     if (event.target) {
         event.target.value = '';
     }
@@ -169,14 +162,6 @@ export default function BottomToolbar({
     toast({ title: "Import File", description: "Functionality to import PDF/PPT will be implemented here." });
   };
 
-  const handleCopyPage = () => {
-    toast({ title: "Copy Page", description: "Functionality to copy the current page will be implemented here." });
-  };
-
-  const handleDeletePage = () => {
-    toast({ title: "Delete Page", description: "Functionality to delete the current page will be implemented here." });
-  };
-
   const handleCapturePhoto = () => {
     if (videoRef.current && hasCameraPermission) {
       const canvas = document.createElement('canvas');
@@ -186,9 +171,7 @@ export default function BottomToolbar({
       if (context) {
         context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL('image/png');
-        // Call onImageUploaded for consistency, if you want photos to also create new pages.
-        // For now, just a toast as per original behavior for photo capture.
-        onImageUploaded(dataUrl); // Assuming captured photos should also be added as pages
+        onImageUploaded(dataUrl);
         toast({ title: "Photo Captured & Added", description: "Photo added as a new page." });
         setIsTakePhotoDialogOpen(false);
       }
@@ -269,19 +252,6 @@ export default function BottomToolbar({
                 <DropdownMenuItem onClick={handleImportFile}>
                   <FileUp className="mr-2 h-4 w-4" />
                   <span>Import File (PDF/PPT)</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onAddBlankPage}>
-                  <FilePlus2 className="mr-2 h-4 w-4" />
-                  <span>Add Blank Page</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleCopyPage}>
-                  <Copy className="mr-2 h-4 w-4" />
-                  <span>Copy Page</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleDeletePage}>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  <span>Delete Page</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

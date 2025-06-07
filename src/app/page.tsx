@@ -53,7 +53,7 @@ export default function DocumentEditorPage() {
       return updatedPages;
     });
     if (makeActive) {
-        setIsThumbnailSidebarOpen(true); // Optionally open sidebar when new page is active
+        setIsThumbnailSidebarOpen(true); 
     }
   };
 
@@ -170,7 +170,6 @@ export default function DocumentEditorPage() {
       )}
 
       <BottomToolbar
-        onAddBlankPage={handleAddBlankPage}
         activeToolId={activeToolId}
         setActiveToolId={setActiveToolId}
         isPenSettingsOpen={isPenSettingsOpen}
