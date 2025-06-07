@@ -33,7 +33,11 @@ import {
   Video,
   Camera,
   FileUp,
+  Loader2,
 } from "lucide-react";
+import type { Page } from "@/lib/types";
+import * as pdfjsLib from 'pdfjs-dist';
+
 
 interface BottomToolbarProps {
   activeToolId: string | null;
@@ -42,7 +46,8 @@ interface BottomToolbarProps {
   setIsPenSettingsOpen: (isOpen: boolean) => void;
   isEraserSettingsOpen: boolean;
   setIsEraserSettingsOpen: (isOpen: boolean) => void;
-  onImageUploaded: (imageDataUrl: string) => void;
+  onImageUploaded: (imageDataUrl: string, originalFileName?: string) => void;
+  onPagesImported: (pages: Page[]) => void;
 }
 
 export default function BottomToolbar({
@@ -53,13 +58,45 @@ export default function BottomToolbar({
   isEraserSettingsOpen,
   setIsEraserSettingsOpen,
   onImageUploaded,
+  onPagesImported,
 }: BottomToolbarProps) {
   const { toast } = useToast();
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const imageFileInputRef = React.useRef<HTMLInputElement>(null);
+  const pdfFileInputRef = React.useRef<HTMLInputElement>(null);
+  const [isProcessingPdf, setIsProcessingPdf] = React.useState(false);
 
   const [isTakePhotoDialogOpen, setIsTakePhotoDialogOpen] = React.useState(false);
   const [hasCameraPermission, setHasCameraPermission] = React.useState<boolean | null>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
+
+  React.useEffect(() => {
+    const setupPdfWorker = async () => {
+      try {
+        const workerSrc = (await import('pdfjs-dist/build/pdf.worker.min.mjs')).default;
+         if (workerSrc && typeof workerSrc !== 'string') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([workerSrc], { type: 'application/javascript' }));
+        } else if (typeof workerSrc === 'string') {
+             pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+        } else {
+            // Fallback if using an older version or specific CDN build
+            const PDF_WORKER_URL = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+            pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
+        }
+      } catch (error) {
+        console.error("Error setting up PDF.js worker:", error);
+        toast({
+            variant: "destructive",
+            title: "PDF Worker Error",
+            description: "Could not initialize PDF processing. Please try refreshing the page.",
+        });
+         // Fallback if dynamic import fails
+        const PDF_WORKER_URL = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
+      }
+    };
+    setupPdfWorker();
+  }, [toast]);
+
 
   const handleToolClick = (toolId: string) => {
     if (toolId === 'pen') {
@@ -134,7 +171,7 @@ export default function BottomToolbar({
       const reader = new FileReader();
       reader.onloadend = () => {
         if (typeof reader.result === 'string') {
-          onImageUploaded(reader.result);
+          onImageUploaded(reader.result, file.name);
           toast({ title: "Image Uploaded", description: "The image has been added as a new page." });
         } else {
           toast({ variant: "destructive", title: "Upload Failed", description: "Could not read image file."});
@@ -146,21 +183,87 @@ export default function BottomToolbar({
       reader.readAsDataURL(file);
     }
     if (event.target) {
-        event.target.value = '';
+        event.target.value = ''; // Reset file input
     }
   };
 
   const triggerImageUpload = () => {
-    fileInputRef.current?.click();
+    imageFileInputRef.current?.click();
   };
 
   const handleUploadVideo = () => {
     toast({ title: "Upload Video", description: "Functionality to upload video will be implemented here." });
   };
 
-  const handleImportFile = () => {
-    toast({ title: "Import File", description: "Functionality to import PDF/PPT will be implemented here." });
+  const triggerPdfUpload = () => {
+    pdfFileInputRef.current?.click();
   };
+
+  const handlePdfFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== "application/pdf") {
+      toast({ variant: "destructive", title: "Invalid File Type", description: "Please select a PDF file." });
+      if (event.target) event.target.value = '';
+      return;
+    }
+
+    setIsProcessingPdf(true);
+    toast({ title: "Processing PDF...", description: "Please wait while the PDF is being converted to pages." });
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const typedArray = new Uint8Array(e.target?.result as ArrayBuffer);
+        const loadingTask = pdfjsLib.getDocument({ data: typedArray });
+        const pdf = await loadingTask.promise;
+        const numPages = pdf.numPages;
+        const importedPages: Page[] = [];
+
+        for (let i = 1; i <= numPages; i++) {
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 1.5 }); // Adjust scale as needed
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+
+          if (context) {
+            const renderContext = {
+              canvasContext: context,
+              viewport: viewport,
+            };
+            await page.render(renderContext).promise;
+            const dataUrl = canvas.toDataURL('image/png');
+            importedPages.push({
+              id: `${file.name}-page-${i}-${Date.now()}`,
+              src: dataUrl,
+              alt: `${file.name} - Page ${i}`,
+              hint: 'pdf page',
+              type: 'image', // Treat PDF pages as images for drawing
+              drawingData: [],
+            });
+          }
+           toast({ title: "Processing PDF...", description: `Processed page ${i} of ${numPages}` });
+        }
+        onPagesImported(importedPages);
+        toast({ title: "PDF Imported", description: `${file.name} has been successfully converted and added as ${numPages} page(s).` });
+      };
+      reader.onerror = () => {
+         toast({ variant: "destructive", title: "PDF Read Error", description: "Could not read the PDF file." });
+      }
+      reader.readAsArrayBuffer(file);
+
+    } catch (error) {
+      console.error("Error processing PDF:", error);
+      toast({ variant: "destructive", title: "PDF Processing Error", description: "An error occurred while processing the PDF." });
+    } finally {
+      setIsProcessingPdf(false);
+      if (event.target) event.target.value = ''; // Reset file input
+    }
+  };
+
 
   const handleCapturePhoto = () => {
     if (videoRef.current && hasCameraPermission) {
@@ -171,7 +274,7 @@ export default function BottomToolbar({
       if (context) {
         context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL('image/png');
-        onImageUploaded(dataUrl);
+        onImageUploaded(dataUrl, `Photo ${Date.now()}`);
         toast({ title: "Photo Captured & Added", description: "Photo added as a new page." });
         setIsTakePhotoDialogOpen(false);
       }
@@ -189,8 +292,15 @@ export default function BottomToolbar({
       <input
         type="file"
         accept="image/*"
-        ref={fileInputRef}
+        ref={imageFileInputRef}
         onChange={handleImageFileSelected}
+        className="hidden"
+      />
+      <input
+        type="file"
+        accept=".pdf"
+        ref={pdfFileInputRef}
+        onChange={handlePdfFileSelected}
         className="hidden"
       />
       <div className="flex justify-center items-center">
@@ -235,23 +345,23 @@ export default function BottomToolbar({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="center" side="top" className="w-56 mb-2">
-                <DropdownMenuItem onClick={triggerImageUpload}>
+                <DropdownMenuItem onClick={triggerImageUpload} disabled={isProcessingPdf}>
                   <ImageUp className="mr-2 h-4 w-4" />
                   <span>Upload Image</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleUploadVideo}>
+                <DropdownMenuItem onClick={handleUploadVideo} disabled={isProcessingPdf}>
                   <Video className="mr-2 h-4 w-4" />
                   <span>Upload Video</span>
                 </DropdownMenuItem>
                 <DialogTrigger asChild>
-                  <DropdownMenuItem onSelect={() => setHasCameraPermission(null)}>
+                  <DropdownMenuItem onSelect={() => setHasCameraPermission(null)} disabled={isProcessingPdf}>
                     <Camera className="mr-2 h-4 w-4" />
                     <span>Take Photo</span>
                   </DropdownMenuItem>
                 </DialogTrigger>
-                <DropdownMenuItem onClick={handleImportFile}>
-                  <FileUp className="mr-2 h-4 w-4" />
-                  <span>Import File (PDF/PPT)</span>
+                <DropdownMenuItem onClick={triggerPdfUpload} disabled={isProcessingPdf}>
+                  {isProcessingPdf ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileUp className="mr-2 h-4 w-4" />}
+                  <span>Import PDF</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -297,6 +407,7 @@ export default function BottomToolbar({
               onClick={() => {
                 toast({ title: tool.label, description: "Functionality to be implemented." });
               }}
+              disabled={isProcessingPdf}
             >
               <tool.icon className="h-5 w-5" />
             </Button>

@@ -70,18 +70,29 @@ export default function DocumentEditorPage() {
     addNewPage(newPage);
   };
 
-  const handleImageUploaded = (imageDataUrl: string) => {
+  const handleImageUploaded = (imageDataUrl: string, originalFileName?: string) => {
     const newPageId = (Date.now()).toString();
     const newPage: Page = {
       id: newPageId,
       src: imageDataUrl,
-      alt: `Uploaded Image ${pages.length + 1}`,
+      alt: originalFileName || `Uploaded Image ${pages.length + 1}`,
       hint: 'uploaded image',
       type: 'image',
       drawingData: [],
     };
     addNewPage(newPage);
   };
+
+  const handlePagesImported = (newPages: Page[]) => {
+    if (newPages.length === 0) return;
+    setPages(prevPages => {
+      const updatedPages = [...prevPages, ...newPages];
+      setCurrentPageIndex(prevPages.length); // Set current page to the first of the new pages
+      return updatedPages;
+    });
+    setIsThumbnailSidebarOpen(true); // Open sidebar to show new pages
+  };
+
 
   const toggleThumbnailSidebar = () => {
     setIsThumbnailSidebarOpen(!isThumbnailSidebarOpen);
@@ -177,6 +188,7 @@ export default function DocumentEditorPage() {
         isEraserSettingsOpen={isEraserSettingsOpen}
         setIsEraserSettingsOpen={setIsEraserSettingsOpen}
         onImageUploaded={handleImageUploaded}
+        onPagesImported={handlePagesImported}
       />
     </div>
   );
