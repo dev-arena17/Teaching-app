@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider"; // Import Slider
 import {
   Dialog,
   DialogContent,
@@ -16,7 +17,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil, Highlighter, X } from "lucide-react";
+import { Pencil, Highlighter, X, Circle } from "lucide-react"; // Added Circle for preview
 import { cn } from "@/lib/utils";
 
 interface PenSettingsToolbarProps {
@@ -24,10 +25,11 @@ interface PenSettingsToolbarProps {
   setPenColor: (color: string) => void;
   penStrokeWidth: number;
   setPenStrokeWidth: (width: number) => void;
+  minStrokeWidth: number;
+  maxStrokeWidth: number;
   activePenSubTool: 'pen' | 'highlighter';
   setActivePenSubTool: (tool: 'pen' | 'highlighter') => void;
   availableColors: string[];
-  availableStrokeWidths: number[];
   onClose: () => void;
 }
 
@@ -106,10 +108,11 @@ export default function PenSettingsToolbar({
   setPenColor,
   penStrokeWidth,
   setPenStrokeWidth,
+  minStrokeWidth,
+  maxStrokeWidth,
   activePenSubTool,
   setActivePenSubTool,
   availableColors,
-  availableStrokeWidths,
   onClose,
 }: PenSettingsToolbarProps) {
   const { toast } = useToast();
@@ -124,14 +127,11 @@ export default function PenSettingsToolbar({
   const svPickerRef = React.useRef<HTMLDivElement>(null);
   const hueSliderRef = React.useRef<HTMLDivElement>(null);
 
-  // Sync HSV from penColor when dialog opens or penColor changes
   React.useEffect(() => {
     if (isColorPickerDialogOpen) {
-      // If dialog is open, we don't want external penColor changes to reset the interactive state
-      // We only set the initial state when it opens.
+      // Handled by effect below specific to dialog open
     } else {
-      // If dialog is closed, keep the toolbar's internal state synced with the prop
-      setInitialColorDialog(penColor); // This might be redundant if penColor is source of truth
+      setInitialColorDialog(penColor);
       setCurrentHexInput(penColor);
       const rgb = hexToRgb(penColor);
       if (rgb) {
@@ -143,11 +143,9 @@ export default function PenSettingsToolbar({
     }
   }, [penColor, isColorPickerDialogOpen]);
 
-
-  // Effect to set initial color and HSV when dialog opens
   React.useEffect(() => {
     if (isColorPickerDialogOpen) {
-      setInitialColorDialog(penColor); // Capture the color when dialog opens
+      setInitialColorDialog(penColor);
       setCurrentHexInput(penColor);
       const rgb = hexToRgb(penColor);
       if (rgb) {
@@ -158,10 +156,9 @@ export default function PenSettingsToolbar({
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isColorPickerDialogOpen]); // Only run when dialog open state changes
+  }, [isColorPickerDialogOpen]);
 
 
-  // Sync Hex from HSV
   React.useEffect(() => {
     const rgb = hsvToRgb(currentHue, currentSaturation, currentValue);
     setCurrentHexInput(rgbToHex(rgb.r, rgb.g, rgb.b));
@@ -180,7 +177,6 @@ export default function PenSettingsToolbar({
     }
   };
 
-  // --- SV Picker Interaction ---
   const updateSvFromEvent = (event: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent, rect: DOMRect) => {
     const { x: clientX, y: clientY } = getPointerCoordinates(event);
     let xPos = clientX - rect.left;
@@ -195,19 +191,14 @@ export default function PenSettingsToolbar({
 
   const handleSvInteractionStart = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     if (!svPickerRef.current) return;
-    if (e.nativeEvent instanceof TouchEvent) {
-      e.preventDefault(); // Prevent page scroll on touch
-    }
+    if (e.nativeEvent instanceof TouchEvent) e.nativeEvent.preventDefault();
     const rect = svPickerRef.current.getBoundingClientRect();
     updateSvFromEvent(e.nativeEvent, rect);
 
     const handleMove = (moveEvent: MouseEvent | TouchEvent) => {
-      if (moveEvent instanceof TouchEvent) {
-        moveEvent.preventDefault();
-      }
+      if (moveEvent instanceof TouchEvent) moveEvent.preventDefault();
       updateSvFromEvent(moveEvent, rect);
     };
-
     const handleEnd = () => {
       document.removeEventListener('mousemove', handleMove);
       document.removeEventListener('mouseup', handleEnd);
@@ -224,7 +215,6 @@ export default function PenSettingsToolbar({
     }
   };
 
-  // --- Hue Slider Interaction ---
   const updateHueFromEvent = (event: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent, rect: DOMRect) => {
     const { y: clientY } = getPointerCoordinates(event);
     let yPos = clientY - rect.top;
@@ -234,19 +224,14 @@ export default function PenSettingsToolbar({
 
   const handleHueInteractionStart = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     if (!hueSliderRef.current) return;
-     if (e.nativeEvent instanceof TouchEvent) {
-      e.preventDefault();
-    }
+     if (e.nativeEvent instanceof TouchEvent) e.nativeEvent.preventDefault();
     const rect = hueSliderRef.current.getBoundingClientRect();
     updateHueFromEvent(e.nativeEvent, rect);
 
     const handleMove = (moveEvent: MouseEvent | TouchEvent) => {
-      if (moveEvent instanceof TouchEvent) {
-        moveEvent.preventDefault();
-      }
+      if (moveEvent instanceof TouchEvent) moveEvent.preventDefault();
       updateHueFromEvent(moveEvent, rect);
     };
-
     const handleEnd = () => {
       document.removeEventListener('mousemove', handleMove);
       document.removeEventListener('mouseup', handleEnd);
@@ -263,10 +248,7 @@ export default function PenSettingsToolbar({
     }
   };
 
-
-  const isValidHexColor = (color: string): boolean => {
-    return hexToRgb(color) !== null;
-  };
+  const isValidHexColor = (color: string): boolean => hexToRgb(color) !== null;
 
   const handleCustomColorApply = () => {
     if (isValidHexColor(currentHexInput)) {
@@ -283,7 +265,6 @@ export default function PenSettingsToolbar({
 
   const handleDialogClose = (open: boolean) => {
     if (!open) {
-      // On cancel/close, revert to the color that was active when dialog opened
       setCurrentHexInput(initialColorDialog);
       const rgb = hexToRgb(initialColorDialog);
       if (rgb) {
@@ -296,7 +277,7 @@ export default function PenSettingsToolbar({
     setIsColorPickerDialogOpen(open);
   }
 
-  const svPickerWidth = svPickerRef.current?.clientWidth || 150; // Use clientWidth for actual rendered width
+  const svPickerWidth = svPickerRef.current?.clientWidth || 150;
   const svPickerHeight = svPickerRef.current?.clientHeight || 150;
   const hueSliderHeight = hueSliderRef.current?.clientHeight || 150;
 
@@ -354,7 +335,7 @@ export default function PenSettingsToolbar({
                  <Button variant="outline" size="icon" className="h-8 w-8 rounded-full border-2 flex items-center justify-center" aria-label="More colors">
                     <svg width="20" height="20" viewBox="0 0 100 100">
                         <defs>
-                            <linearGradient id="grad1_pen_settings" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <linearGradient id="grad1_pen_settings_toolbar" x1="0%" y1="0%" x2="100%" y2="100%">
                             <stop offset="0%" style={{stopColor:'red',stopOpacity:1}} />
                             <stop offset="20%" style={{stopColor:'yellow',stopOpacity:1}} />
                             <stop offset="40%" style={{stopColor:'lime',stopOpacity:1}} />
@@ -363,7 +344,7 @@ export default function PenSettingsToolbar({
                             <stop offset="100%" style={{stopColor:'magenta',stopOpacity:1}} />
                             </linearGradient>
                         </defs>
-                        <circle cx="50" cy="50" r="45" fill="url(#grad1_pen_settings)" />
+                        <circle cx="50" cy="50" r="45" fill="url(#grad1_pen_settings_toolbar)" />
                     </svg>
                  </Button>
               </DialogTrigger>
@@ -373,10 +354,9 @@ export default function PenSettingsToolbar({
                 </DialogHeader>
                 <div className="py-4 space-y-4">
                   <div className="flex space-x-3">
-                    {/* SV Picker */}
                     <div
                       ref={svPickerRef}
-                      className="relative w-[150px] h-[150px] cursor-crosshair rounded-sm overflow-hidden border touch-none" // Added touch-none
+                      className="relative w-[150px] h-[150px] cursor-crosshair rounded-sm overflow-hidden border touch-none"
                       style={{ backgroundColor: `hsl(${currentHue}, 100%, 50%)` }}
                       onMouseDown={handleSvInteractionStart}
                       onTouchStart={handleSvInteractionStart}
@@ -392,10 +372,9 @@ export default function PenSettingsToolbar({
                         }}
                       />
                     </div>
-                    {/* Hue Slider */}
                     <div
                       ref={hueSliderRef}
-                      className="relative w-[20px] h-[150px] cursor-pointer rounded-sm overflow-hidden border touch-none" // Added touch-none
+                      className="relative w-[20px] h-[150px] cursor-pointer rounded-sm overflow-hidden border touch-none"
                       style={{ background: 'linear-gradient(to bottom, #FF0000, #FFFF00, #00FF00, #00FFFF, #0000FF, #FF00FF, #FF0000)' }}
                       onMouseDown={handleHueInteractionStart}
                       onTouchStart={handleHueInteractionStart}
@@ -435,29 +414,17 @@ export default function PenSettingsToolbar({
 
           <Separator />
 
-          <div className="flex justify-around items-center gap-2">
-            {availableStrokeWidths.map((width) => (
-              <Button
-                key={width}
-                variant="ghost"
-                className={cn(
-                  "h-10 w-10 p-0 flex items-center justify-center rounded-lg",
-                  penStrokeWidth === width ? "bg-accent" : ""
-                )}
-                onClick={() => setPenStrokeWidth(width)}
-                aria-label={`Set stroke width to ${width}`}
-              >
-                <div
-                  className="bg-foreground rounded-full"
-                  style={{
-                    height: `${Math.min(Math.max(width, 2), 16)}px`,
-                    width: `${Math.min(Math.max(width, 2), 16)}px`,
-                    minHeight: '4px',
-                    minWidth: '4px',
-                  }}
-                />
-              </Button>
-            ))}
+          <div className="flex items-center gap-3 px-2">
+            <Circle className="h-5 w-5 text-foreground/70" />
+            <Slider
+              value={[penStrokeWidth]}
+              onValueChange={(value) => setPenStrokeWidth(value[0])}
+              min={minStrokeWidth}
+              max={maxStrokeWidth}
+              step={1}
+              className="flex-1"
+            />
+             <span className="text-sm text-foreground/70 w-8 text-right">{penStrokeWidth}</span>
           </div>
         </CardContent>
       </Card>

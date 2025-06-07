@@ -31,7 +31,7 @@ import {
   CopyPlus,
   Undo2,
   ImageUp,
-  Video, // Corrected from VideoUp
+  Video,
   Camera,
   FileUp,
   FilePlus2,
@@ -45,6 +45,8 @@ interface BottomToolbarProps {
   setActiveToolId: (toolId: string | null) => void;
   isPenSettingsOpen: boolean;
   setIsPenSettingsOpen: (isOpen: boolean) => void;
+  isEraserSettingsOpen: boolean; // New prop
+  setIsEraserSettingsOpen: (isOpen: boolean) => void; // New prop
 }
 
 export default function BottomToolbar({
@@ -53,6 +55,8 @@ export default function BottomToolbar({
   setActiveToolId,
   isPenSettingsOpen,
   setIsPenSettingsOpen,
+  isEraserSettingsOpen,
+  setIsEraserSettingsOpen,
 }: BottomToolbarProps) {
   const { toast } = useToast();
 
@@ -62,15 +66,25 @@ export default function BottomToolbar({
 
   const handleToolClick = (toolId: string) => {
     if (toolId === 'pen') {
-      if (activeToolId === 'pen') { // If pen tool is already active, clicking it again toggles settings
+      if (activeToolId === 'pen') {
         setIsPenSettingsOpen(!isPenSettingsOpen);
       } else {
         setActiveToolId('pen');
-        setIsPenSettingsOpen(true); // Open settings when pen tool is newly selected
+        setIsPenSettingsOpen(true);
+        setIsEraserSettingsOpen(false); // Close eraser settings if pen is selected
+      }
+    } else if (toolId === 'eraser') {
+      if (activeToolId === 'eraser') {
+        setIsEraserSettingsOpen(!isEraserSettingsOpen);
+      } else {
+        setActiveToolId('eraser');
+        setIsEraserSettingsOpen(true);
+        setIsPenSettingsOpen(false); // Close pen settings if eraser is selected
       }
     } else {
-      setActiveToolId(activeToolId === toolId ? null : toolId); // Toggle other tools
-      setIsPenSettingsOpen(false); // Close pen settings if another tool is selected
+      setActiveToolId(activeToolId === toolId ? null : toolId);
+      setIsPenSettingsOpen(false);
+      setIsEraserSettingsOpen(false);
     }
   };
 
@@ -81,7 +95,7 @@ export default function BottomToolbar({
     { id: "shapes", icon: Shapes, label: "Shapes" },
     { id: "type", icon: Type, label: "Text" },
     { id: "fx", icon: Sigma, label: "Function" },
-    { id: "eraser", icon: Eraser, label: "Eraser" },
+    { id: "eraser", icon: Eraser, label: "Eraser" }, // Added Eraser
   ];
 
   const pageOperationTools = [
@@ -119,27 +133,22 @@ export default function BottomToolbar({
   }, [isTakePhotoDialogOpen, toast]);
 
   const handleUploadImage = () => {
-    console.log("Upload Image clicked");
     toast({ title: "Upload Image", description: "Functionality to upload image will be implemented here." });
   };
 
   const handleUploadVideo = () => {
-    console.log("Upload Video clicked");
     toast({ title: "Upload Video", description: "Functionality to upload video will be implemented here." });
   };
 
   const handleImportFile = () => {
-    console.log("Import File clicked");
     toast({ title: "Import File", description: "Functionality to import PDF/PPT will be implemented here." });
   };
 
   const handleCopyPage = () => {
-    console.log("Copy Page clicked");
     toast({ title: "Copy Page", description: "Functionality to copy the current page will be implemented here." });
   };
 
   const handleDeletePage = () => {
-    console.log("Delete Page clicked");
     toast({ title: "Delete Page", description: "Functionality to delete the current page will be implemented here." });
   };
 
@@ -152,8 +161,8 @@ export default function BottomToolbar({
       if (context) {
         context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL('image/png');
-        console.log("Photo captured:", dataUrl.substring(0,50) + "...");
-        toast({ title: "Photo Captured", description: "Photo captured successfully! (See console for Data URL)" });
+        console.log("Photo captured:", dataUrl.substring(0,50) + "..."); // Keep for debugging if needed
+        toast({ title: "Photo Captured", description: "Photo captured successfully!" });
         setIsTakePhotoDialogOpen(false);
       }
     } else {
@@ -166,7 +175,7 @@ export default function BottomToolbar({
   };
 
   return (
-    <footer className="bg-background p-3 sticky bottom-0 z-20 border-t"> {/* Increased z-index */}
+    <footer className="bg-background p-3 sticky bottom-0 z-20 border-t">
       <div className="flex justify-center items-center">
         <div className="bg-card py-1 px-2 rounded-full shadow-lg flex items-center gap-1">
           {baseTools.map((tool) => (
@@ -282,7 +291,6 @@ export default function BottomToolbar({
               className="h-10 w-10 rounded-full text-foreground/70 hover:bg-accent hover:text-accent-foreground"
               aria-label={tool.label}
               onClick={() => {
-                console.log(`${tool.label} clicked`);
                 toast({ title: tool.label, description: "Functionality to be implemented." });
               }}
             >

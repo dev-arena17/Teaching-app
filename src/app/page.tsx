@@ -6,14 +6,20 @@ import PageHeader from '@/components/page-header';
 import ActivePageView from '@/components/active-page-view';
 import BottomToolbar from '@/components/bottom-toolbar';
 import PageThumbnailSidebar from "@/components/page-thumbnail-sidebar";
-import PenSettingsToolbar from "@/components/pen-settings-toolbar"; // New import
+import PenSettingsToolbar from "@/components/pen-settings-toolbar";
+import EraserSettingsToolbar from "@/components/eraser-settings-toolbar"; // New import
 import type { Page } from "@/lib/types";
 
-// Define default pen settings
-const DEFAULT_PEN_COLOR = "#EF4444"; // A nice red
-const DEFAULT_STROKE_WIDTH = 8;
+// Define default settings
+const DEFAULT_PEN_COLOR = "#EF4444";
+const MIN_PEN_STROKE_WIDTH = 1;
+const MAX_PEN_STROKE_WIDTH = 50;
+const DEFAULT_PEN_STROKE_WIDTH = 5; // Changed from 8
 const PEN_COLORS = ["#000000", "#EF4444", "#3B82F6", "#22C55E", "#A855F7", "#EAB308"];
-const STROKE_WIDTHS = [2, 4, 8, 12, 16];
+
+const MIN_ERASER_SIZE = 5;
+const MAX_ERASER_SIZE = 100;
+const DEFAULT_ERASER_SIZE = 20;
 
 
 export default function DocumentEditorPage() {
@@ -23,43 +29,48 @@ export default function DocumentEditorPage() {
   const [currentPageIndex, setCurrentPageIndex] = React.useState(0);
   const [isThumbnailSidebarOpen, setIsThumbnailSidebarOpen] = React.useState(false);
 
-  // Pen tool state
+  // Tool state
   const [activeToolId, setActiveToolId] = React.useState<string | null>(null);
+
+  // Pen tool state
   const [isPenSettingsOpen, setIsPenSettingsOpen] = React.useState(false);
   const [penColor, setPenColor] = React.useState<string>(DEFAULT_PEN_COLOR);
-  const [penStrokeWidth, setPenStrokeWidth] = React.useState<number>(DEFAULT_STROKE_WIDTH);
+  const [penStrokeWidth, setPenStrokeWidth] = React.useState<number>(DEFAULT_PEN_STROKE_WIDTH);
   const [activePenSubTool, setActivePenSubTool] = React.useState<'pen' | 'highlighter'>('pen');
+
+  // Eraser tool state
+  const [isEraserSettingsOpen, setIsEraserSettingsOpen] = React.useState(false);
+  const [eraserSize, setEraserSize] = React.useState<number>(DEFAULT_ERASER_SIZE);
 
 
   const handlePageSelect = (index: number) => {
     setCurrentPageIndex(index);
-    setIsThumbnailSidebarOpen(false); // Close sidebar on page selection
+    setIsThumbnailSidebarOpen(false);
   };
 
   const handleAddBlankPage = () => {
-    const newPageId = (pages.length + 1).toString();
+    const newPageId = (Date.now()).toString(); // Use timestamp for unique ID
     const newPage: Page = {
       id: newPageId,
       src: undefined,
-      alt: `Page ${newPageId}`,
+      alt: `Page ${pages.length + 1}`,
       hint: 'blank page',
       type: 'blank',
       drawingData: [],
     };
     setPages(prevPages => {
       const updatedPages = [...prevPages, newPage];
-      // Automatically switch to the new page
       setCurrentPageIndex(updatedPages.length - 1);
       return updatedPages;
     });
-    setIsThumbnailSidebarOpen(true); // Keep sidebar open
+    setIsThumbnailSidebarOpen(true);
   };
 
   const toggleThumbnailSidebar = () => {
     setIsThumbnailSidebarOpen(!isThumbnailSidebarOpen);
   };
 
-  const handleDrawingChange = (drawingData: any[]) => { // 'any' for simplicity, define properly later
+  const handleDrawingChange = (drawingData: any[]) => {
     setPages(prevPages => {
       const newPages = [...prevPages];
       if (newPages[currentPageIndex]) {
@@ -67,6 +78,12 @@ export default function DocumentEditorPage() {
       }
       return newPages;
     });
+  };
+
+  const handleEraseAll = () => {
+    if (pages[currentPageIndex]) {
+      handleDrawingChange([]); // Set drawing data to empty array for current page
+    }
   };
 
 
@@ -79,17 +96,19 @@ export default function DocumentEditorPage() {
         totalPages={pages.length}
         onToggleThumbnailSidebar={toggleThumbnailSidebar}
       />
-      <div className="flex flex-1 overflow-hidden relative"> {/* Added relative for positioning PenSettingsToolbar */}
+      <div className="flex flex-1 overflow-hidden relative">
         <main className="flex-1 overflow-y-auto p-4 bg-muted">
           {currentPageData ? (
             <ActivePageView
               page={currentPageData}
               penColor={penColor}
               penStrokeWidth={penStrokeWidth}
+              eraserSize={eraserSize}
               activeToolId={activeToolId}
               onDrawingChange={handleDrawingChange}
               isPenActive={activeToolId === 'pen' && activePenSubTool === 'pen'}
               isHighlighterActive={activeToolId === 'pen' && activePenSubTool === 'highlighter'}
+              isEraserActive={activeToolId === 'eraser'}
             />
           ) : (
             <div className="flex items-center justify-center h-full">
@@ -113,11 +132,23 @@ export default function DocumentEditorPage() {
           setPenColor={setPenColor}
           penStrokeWidth={penStrokeWidth}
           setPenStrokeWidth={setPenStrokeWidth}
+          minStrokeWidth={MIN_PEN_STROKE_WIDTH}
+          maxStrokeWidth={MAX_PEN_STROKE_WIDTH}
           activePenSubTool={activePenSubTool}
           setActivePenSubTool={setActivePenSubTool}
           availableColors={PEN_COLORS}
-          availableStrokeWidths={STROKE_WIDTHS}
           onClose={() => setIsPenSettingsOpen(false)}
+        />
+      )}
+
+      {isEraserSettingsOpen && activeToolId === 'eraser' && (
+        <EraserSettingsToolbar
+          eraserSize={eraserSize}
+          setEraserSize={setEraserSize}
+          minEraserSize={MIN_ERASER_SIZE}
+          maxEraserSize={MAX_ERASER_SIZE}
+          onEraseAll={handleEraseAll}
+          onClose={() => setIsEraserSettingsOpen(false)}
         />
       )}
 
@@ -127,6 +158,8 @@ export default function DocumentEditorPage() {
         setActiveToolId={setActiveToolId}
         isPenSettingsOpen={isPenSettingsOpen}
         setIsPenSettingsOpen={setIsPenSettingsOpen}
+        isEraserSettingsOpen={isEraserSettingsOpen}
+        setIsEraserSettingsOpen={setIsEraserSettingsOpen}
       />
     </div>
   );

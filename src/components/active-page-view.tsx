@@ -4,31 +4,35 @@
 import Image from 'next/image';
 import * as React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import type { Page } from '@/lib/types';
+import type { Page, DrawingPath, DrawingPoint } from '@/lib/types';
 
 interface ActivePageViewProps {
   page: Page;
   penColor: string;
   penStrokeWidth: number;
+  eraserSize: number; // New prop for eraser size
   activeToolId: string | null;
-  onDrawingChange: (drawingData: any[]) => void;
+  onDrawingChange: (drawingData: DrawingPath[]) => void;
   isPenActive: boolean;
   isHighlighterActive: boolean;
+  isEraserActive: boolean; // New prop
 }
 
 export default function ActivePageView({
   page,
   penColor,
   penStrokeWidth,
+  eraserSize,
   activeToolId,
   onDrawingChange,
   isPenActive,
-  isHighlighterActive
+  isHighlighterActive,
+  isEraserActive,
 }: ActivePageViewProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const transformContainerRef = React.useRef<HTMLDivElement>(null);
-  const [isDrawing, setIsDrawing] = React.useState(false);
-  const [paths, setPaths] = React.useState<any[]>(page.drawingData || []);
+  const [isInteracting, setIsInteracting] = React.useState(false); // Combined state for drawing/erasing
+  const [paths, setPaths] = React.useState<DrawingPath[]>(page.drawingData || []);
 
   const [zoom, setZoom] = React.useState(1);
   const [offset, setOffset] = React.useState({ x: 0, y: 0 });
@@ -37,7 +41,6 @@ export default function ActivePageView({
 
   React.useEffect(() => {
     setPaths(page.drawingData || []);
-    // Reset zoom and pan when page changes
     setZoom(1);
     setOffset({ x: 0, y: 0 });
   }, [page.id, page.drawingData]);
@@ -48,110 +51,148 @@ export default function ActivePageView({
     const context = canvas.getContext('2d');
     if (!context) return;
 
-    const parent = canvas.parentElement?.parentElement; // The CardContent
+    const parent = canvas.parentElement?.parentElement;
     if (parent) {
-        canvas.width = parent.offsetWidth;
-        canvas.height = parent.offsetHeight;
+        // Set canvas physical dimensions once based on parent (unscaled)
+        // This ensures drawing resolution remains consistent
+        if (canvas.width !== parent.offsetWidth || canvas.height !== parent.offsetHeight) {
+            canvas.width = parent.offsetWidth;
+            canvas.height = parent.offsetHeight;
+        }
     }
 
     context.clearRect(0, 0, canvas.width, canvas.height);
     paths.forEach(pathObj => {
       context.beginPath();
       context.strokeStyle = pathObj.color;
-      context.lineWidth = pathObj.strokeWidth; // This strokeWidth is already effectively "scaled" by the zoom on the container
+      context.lineWidth = pathObj.strokeWidth; // Logical stroke width
       context.globalAlpha = pathObj.isHighlighter ? 0.3 : 1.0;
-      pathObj.points.forEach((point: {x:number, y:number}, index: number) => {
+      context.lineCap = 'round';
+      context.lineJoin = 'round';
+      pathObj.points.forEach((point: DrawingPoint, index: number) => {
+        // Denormalize points for rendering on the fixed-size canvas
+        const x = point.x * canvas.width;
+        const y = point.y * canvas.height;
         if (index === 0) {
-          context.moveTo(point.x * canvas.width, point.y * canvas.height);
+          context.moveTo(x,y);
         } else {
-          context.lineTo(point.x * canvas.width, point.y * canvas.height);
+          context.lineTo(x,y);
         }
       });
       context.stroke();
     });
     context.globalAlpha = 1.0;
 
-  }, [paths, page.id, penColor, penStrokeWidth, zoom, offset]); // Redraw on zoom/pan as well if needed, though canvas content itself isn't scaled here
+  }, [paths, page.id]); // Removed dependencies that don't affect canvas redrawing directly
 
+  const getPointerPositionOnCanvas = (event: React.MouseEvent | React.TouchEvent): DrawingPoint | null => {
+    const canvas = canvasRef.current;
+    if (!canvas || !transformContainerRef.current) return null;
+
+    const { clientX, clientY } = getPointerPosition(event as React.MouseEvent); // Native clientX/Y
+    const canvasRect = canvas.getBoundingClientRect(); // This is the *visual* rect of the canvas on screen
+
+    // Pointer position relative to the visual canvas element
+    const pointerXOnVisualCanvas = clientX - canvasRect.left;
+    const pointerYOnVisualCanvas = clientY - canvasRect.top;
+    
+    // To get position on the logical, unscaled canvas, we divide by zoom
+    // The canvas itself is not scaled, its parent is. So these coordinates are relative to the 0,0 of the canvas element itself.
+    const logicalX = pointerXOnVisualCanvas / zoom;
+    const logicalY = pointerYOnVisualCanvas / zoom;
+
+    // Normalize coordinates (0-1 range) based on logical canvas dimensions
+    const normX = logicalX / canvas.width;
+    const normY = logicalY / canvas.height;
+
+    return { x: normX, y: normY };
+  };
+  
   const getPointerPosition = (event: React.MouseEvent | React.TouchEvent) => {
-    if ('touches' in event) {
+    if ('touches' in event && event.touches.length > 0) {
       return { clientX: event.touches[0].clientX, clientY: event.touches[0].clientY };
     }
-    return { clientX: event.clientX, clientY: event.clientY };
+    return { clientX: (event as React.MouseEvent).clientX, clientY: (event as React.MouseEvent).clientY };
   };
 
-  const startDrawing = (event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
 
-    if (activeToolId === 'pen') {
-      const { clientX, clientY } = getPointerPosition(event as React.MouseEvent); // Cast needed for getPointerPosition
-      const rect = canvas.getBoundingClientRect(); // This rect is of the *scaled* canvas element
+  const startInteraction = (event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    if (isPenActive || isHighlighterActive || isEraserActive) {
+      const pos = getPointerPositionOnCanvas(event as React.MouseEvent);
+      if (!pos) return;
 
-      // Adjust pointer position for current zoom and offset to get coordinates on the unscaled canvas
-      const pointerXOnCanvasElement = clientX - rect.left;
-      const pointerYOnCanvasElement = clientY - rect.top;
-
-      const xOnUnscaledCanvas = pointerXOnCanvasElement / zoom;
-      const yOnUnscaledCanvas = pointerYOnCanvasElement / zoom;
-      
-      const normX = xOnUnscaledCanvas / canvas.width;
-      const normY = yOnUnscaledCanvas / canvas.height;
-
-      setIsDrawing(true);
-      const newPath = {
-        color: penColor,
-        strokeWidth: penStrokeWidth, // Store the logical stroke width
-        isHighlighter: isHighlighterActive,
-        points: [{ x: normX, y: normY }]
-      };
-      setPaths(prevPaths => [...prevPaths, newPath]);
-    } else {
-      // Start Panning
+      setIsInteracting(true);
+      if (isPenActive || isHighlighterActive) {
+        const newPath: DrawingPath = {
+          color: penColor,
+          strokeWidth: penStrokeWidth,
+          isHighlighter: isHighlighterActive,
+          points: [pos]
+        };
+        setPaths(prevPaths => [...prevPaths, newPath]);
+      } else if (isEraserActive) {
+        // Eraser starts modifying paths in the 'interact' function
+        interact(event as React.MouseEvent);
+      }
+    } else { // Start Panning
       const { clientX, clientY } = getPointerPosition(event as React.MouseEvent);
       setIsPanning(true);
       setLastPanPosition({ x: clientX, y: clientY });
     }
   };
 
-  const draw = (event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  const interact = (event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    if (!isInteracting) return;
+    if (isPanning) { // Handle Panning
+        const { clientX, clientY } = getPointerPosition(event as React.MouseEvent);
+        const dx = clientX - lastPanPosition.x;
+        const dy = clientY - lastPanPosition.y;
+        setOffset(prevOffset => ({ x: prevOffset.x + dx, y: prevOffset.y + dy }));
+        setLastPanPosition({ x: clientX, y: clientY });
+        return;
+    }
 
-    if (isDrawing && activeToolId === 'pen') {
-      const { clientX, clientY } = getPointerPosition(event as React.MouseEvent);
-      const rect = canvas.getBoundingClientRect();
 
-      const pointerXOnCanvasElement = clientX - rect.left;
-      const pointerYOnCanvasElement = clientY - rect.top;
+    const pos = getPointerPositionOnCanvas(event as React.MouseEvent);
+    if (!pos) return;
 
-      const xOnUnscaledCanvas = pointerXOnCanvasElement / zoom;
-      const yOnUnscaledCanvas = pointerYOnCanvasElement / zoom;
-
-      const normX = xOnUnscaledCanvas / canvas.width;
-      const normY = yOnUnscaledCanvas / canvas.height;
-
+    if (isPenActive || isHighlighterActive) {
       setPaths(prevPaths => {
         const updatedPaths = [...prevPaths];
         const currentPath = updatedPaths[updatedPaths.length - 1];
         if (currentPath) {
-          currentPath.points.push({ x: normX, y: normY });
+          currentPath.points.push(pos);
         }
         return updatedPaths;
       });
-    } else if (isPanning) {
-      const { clientX, clientY } = getPointerPosition(event as React.MouseEvent);
-      const dx = clientX - lastPanPosition.x;
-      const dy = clientY - lastPanPosition.y;
-      setOffset(prevOffset => ({ x: prevOffset.x + dx, y: prevOffset.y + dy }));
-      setLastPanPosition({ x: clientX, y: clientY });
+    } else if (isEraserActive) {
+      setPaths(prevPaths => {
+        const canvas = canvasRef.current;
+        if (!canvas) return prevPaths;
+
+        // Eraser size in normalized terms (relative to canvas width for simplicity)
+        // This makes the eraser effect scale with zoom.
+        const normalizedEraserRadius = (eraserSize / 2) / canvas.width;
+
+        return prevPaths.filter(pathObj => {
+          for (const point of pathObj.points) {
+            const distance = Math.sqrt(Math.pow(point.x - pos.x, 2) + Math.pow(point.y - pos.y, 2));
+            if (distance < normalizedEraserRadius + (pathObj.strokeWidth / (2 * canvas.width)) ) { // consider path stroke width too
+              return false; // Remove this path
+            }
+          }
+          return true; // Keep this path
+        });
+      });
     }
   };
 
-  const stopDrawingOrPanning = () => {
-    if (isDrawing) {
-        setIsDrawing(false);
-        onDrawingChange(paths);
+  const stopInteraction = () => {
+    if (isInteracting) {
+        setIsInteracting(false);
+        if (isPenActive || isHighlighterActive || isEraserActive) {
+            onDrawingChange(paths); // Persist changes
+        }
     }
     if (isPanning) {
         setIsPanning(false);
@@ -165,16 +206,12 @@ export default function ActivePageView({
 
     const zoomFactor = 1.1;
     const newZoom = event.deltaY < 0 ? zoom * zoomFactor : zoom / zoomFactor;
-    const clampedZoom = Math.max(0.2, Math.min(newZoom, 5)); // Clamp zoom level
+    const clampedZoom = Math.max(0.2, Math.min(newZoom, 5));
 
     const rect = transformContainer.getBoundingClientRect();
-    const mouseX = event.clientX - rect.left; // Mouse position relative to the container
+    const mouseX = event.clientX - rect.left;
     const mouseY = event.clientY - rect.top;
 
-    // Calculate new offset to zoom towards the cursor
-    // (offsetX - mouseX) is the vector from mouse to origin of content
-    // This vector needs to be scaled by (newZoom / zoom)
-    // Then add mouseX back to get new origin position relative to viewport
     const newOffsetX = mouseX - (mouseX - offset.x) * (clampedZoom / zoom);
     const newOffsetY = mouseY - (mouseY - offset.y) * (clampedZoom / zoom);
     
@@ -189,27 +226,34 @@ export default function ActivePageView({
       </div>
     );
   }
+  
+  let cursorStyle = 'grab';
+  if (isPanning) cursorStyle = 'grabbing';
+  else if (isPenActive || isHighlighterActive) cursorStyle = 'crosshair';
+  else if (isEraserActive) cursorStyle = `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="${eraserSize * zoom}" height="${eraserSize * zoom}" viewBox="0 0 ${eraserSize} ${eraserSize}"><circle cx="${eraserSize/2}" cy="${eraserSize/2}" r="${eraserSize/2 -1}" fill="rgba(255,255,255,0.5)" stroke="black" stroke-width="1"/></svg>') ${eraserSize*zoom/2} ${eraserSize*zoom/2}, auto`;
+
 
   return (
     <div 
-      className="flex justify-center items-start h-full overflow-hidden" // Added overflow-hidden
+      className="flex justify-center items-start h-full overflow-hidden"
       onWheel={handleWheel} 
-      onMouseDown={startDrawing}
-      onMouseMove={draw}
-      onMouseUp={stopDrawingOrPanning}
-      onMouseLeave={stopDrawingOrPanning} // Stop panning if mouse leaves
-      onTouchStart={startDrawing}
-      onTouchMove={draw}
-      onTouchEnd={stopDrawingOrPanning}
+      onMouseDown={startInteraction}
+      onMouseMove={interact}
+      onMouseUp={stopInteraction}
+      onMouseLeave={stopInteraction}
+      onTouchStart={startInteraction}
+      onTouchMove={interact}
+      onTouchEnd={stopInteraction}
+      style={{ cursor: cursorStyle }}
     >
       <Card className="overflow-hidden shadow-xl rounded-xl w-full max-w-3xl my-auto aspect-[16/10] bg-card relative">
-        <CardContent className="p-0 relative h-full w-full overflow-hidden"> {/* Added overflow-hidden here as well */}
+        <CardContent className="p-0 relative h-full w-full overflow-hidden">
           <div
             ref={transformContainerRef}
-            className="h-full w-full origin-top-left" // origin-top-left is important for scale and translate
+            className="h-full w-full origin-top-left"
             style={{
               transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-              cursor: activeToolId === 'pen' ? 'crosshair' : (isPanning ? 'grabbing' : 'grab')
+              // Cursor style is now on the parent div
             }}
           >
             {page.type === 'blank' || !page.src ? (
@@ -221,21 +265,20 @@ export default function ActivePageView({
                 src={page.src}
                 alt={page.alt}
                 layout="fill"
-                objectFit="contain" // 'contain' ensures the whole image is visible, 'cover' would fill and crop
-                className="w-full h-full" // Ensure image fills the transformed container
+                objectFit="contain"
+                className="w-full h-full"
                 data-ai-hint={page.hint}
                 priority={true}
-                draggable={false} // Prevent browser's default image drag
+                draggable={false}
               />
             )}
+            {/* Canvas is NOT scaled directly. Its parent is. Canvas draws at its native resolution. */}
             <canvas
               ref={canvasRef}
               className="absolute top-0 left-0 w-full h-full touch-none"
-              style={{ zIndex: 10 }} // Ensure canvas is on top
-              // Event handlers are moved to the parent div for unified pan/draw logic
+              style={{ zIndex: 10 }}
             />
           </div>
-          {/* Removed the page ID display from here */}
         </CardContent>
       </Card>
     </div>
