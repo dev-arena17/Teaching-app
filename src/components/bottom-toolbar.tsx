@@ -46,6 +46,8 @@ interface BottomToolbarProps {
   setIsPenSettingsOpen: (isOpen: boolean) => void;
   isEraserSettingsOpen: boolean;
   setIsEraserSettingsOpen: (isOpen: boolean) => void;
+  isShapesToolbarOpen: boolean;
+  setIsShapesToolbarOpen: (isOpen: boolean) => void;
   onImageUploaded: (imageDataUrl: string, originalFileName?: string) => void;
   onPagesImported: (pages: Page[]) => void;
 }
@@ -57,6 +59,8 @@ export default function BottomToolbar({
   setIsPenSettingsOpen,
   isEraserSettingsOpen,
   setIsEraserSettingsOpen,
+  isShapesToolbarOpen,
+  setIsShapesToolbarOpen,
   onImageUploaded,
   onPagesImported,
 }: BottomToolbarProps) {
@@ -78,7 +82,6 @@ export default function BottomToolbar({
         } else if (typeof workerSrc === 'string') {
              pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
         } else {
-            // Fallback if using an older version or specific CDN build
             const PDF_WORKER_URL = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
             pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
         }
@@ -89,7 +92,6 @@ export default function BottomToolbar({
             title: "PDF Worker Error",
             description: "Could not initialize PDF processing. Please try refreshing the page.",
         });
-         // Fallback if dynamic import fails
         const PDF_WORKER_URL = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
         pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
       }
@@ -106,6 +108,7 @@ export default function BottomToolbar({
         setActiveToolId('pen');
         setIsPenSettingsOpen(true);
         setIsEraserSettingsOpen(false);
+        setIsShapesToolbarOpen(false);
       }
     } else if (toolId === 'eraser') {
       if (activeToolId === 'eraser') {
@@ -114,11 +117,23 @@ export default function BottomToolbar({
         setActiveToolId('eraser');
         setIsEraserSettingsOpen(true);
         setIsPenSettingsOpen(false);
+        setIsShapesToolbarOpen(false);
+      }
+    } else if (toolId === 'shapes') {
+      if (activeToolId === 'shapes') {
+        setIsShapesToolbarOpen(!isShapesToolbarOpen);
+      } else {
+        setActiveToolId('shapes');
+        setIsShapesToolbarOpen(true);
+        setIsPenSettingsOpen(false);
+        setIsEraserSettingsOpen(false);
       }
     } else {
+      // For other tools that don't have their own pop-up toolbars
       setActiveToolId(activeToolId === toolId ? null : toolId);
       setIsPenSettingsOpen(false);
       setIsEraserSettingsOpen(false);
+      setIsShapesToolbarOpen(false);
     }
   };
 
@@ -183,7 +198,7 @@ export default function BottomToolbar({
       reader.readAsDataURL(file);
     }
     if (event.target) {
-        event.target.value = ''; // Reset file input
+        event.target.value = ''; 
     }
   };
 
@@ -223,7 +238,7 @@ export default function BottomToolbar({
 
         for (let i = 1; i <= numPages; i++) {
           const page = await pdf.getPage(i);
-          const viewport = page.getViewport({ scale: 1.5 }); // Adjust scale as needed
+          const viewport = page.getViewport({ scale: 1.5 }); 
           const canvas = document.createElement('canvas');
           const context = canvas.getContext('2d');
           canvas.height = viewport.height;
@@ -241,7 +256,7 @@ export default function BottomToolbar({
               src: dataUrl,
               alt: `${file.name} - Page ${i}`,
               hint: 'pdf page',
-              type: 'image', // Treat PDF pages as images for drawing
+              type: 'image', 
               drawingData: [],
             });
           }
@@ -260,7 +275,7 @@ export default function BottomToolbar({
       toast({ variant: "destructive", title: "PDF Processing Error", description: "An error occurred while processing the PDF." });
     } finally {
       setIsProcessingPdf(false);
-      if (event.target) event.target.value = ''; // Reset file input
+      if (event.target) event.target.value = ''; 
     }
   };
 

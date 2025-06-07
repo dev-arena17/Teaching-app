@@ -8,6 +8,7 @@ import BottomToolbar from '@/components/bottom-toolbar';
 import PageThumbnailSidebar from "@/components/page-thumbnail-sidebar";
 import PenSettingsToolbar from "@/components/pen-settings-toolbar";
 import EraserSettingsToolbar from "@/components/eraser-settings-toolbar";
+import ShapesToolbar from "@/components/shapes-toolbar"; // Import ShapesToolbar
 import type { Page } from "@/lib/types";
 
 const DEFAULT_PEN_COLOR = "#EF4444";
@@ -37,6 +38,9 @@ export default function DocumentEditorPage() {
 
   const [isEraserSettingsOpen, setIsEraserSettingsOpen] = React.useState(false);
   const [eraserSize, setEraserSize] = React.useState<number>(DEFAULT_ERASER_SIZE);
+
+  const [isShapesToolbarOpen, setIsShapesToolbarOpen] = React.useState(false);
+  const [selectedShapeType, setSelectedShapeType] = React.useState<string | null>(null);
 
 
   const handlePageSelect = (index: number) => {
@@ -87,10 +91,10 @@ export default function DocumentEditorPage() {
     if (newPages.length === 0) return;
     setPages(prevPages => {
       const updatedPages = [...prevPages, ...newPages];
-      setCurrentPageIndex(prevPages.length); // Set current page to the first of the new pages
+      setCurrentPageIndex(prevPages.length); 
       return updatedPages;
     });
-    setIsThumbnailSidebarOpen(true); // Open sidebar to show new pages
+    setIsThumbnailSidebarOpen(true); 
   };
 
 
@@ -137,6 +141,7 @@ export default function DocumentEditorPage() {
               isPenActive={activeToolId === 'pen' && activePenSubTool === 'pen'}
               isHighlighterActive={activeToolId === 'pen' && activePenSubTool === 'highlighter'}
               isEraserActive={activeToolId === 'eraser'}
+              // selectedShapeType={selectedShapeType} // Will be needed for drawing shapes later
             />
           ) : (
             <div className="flex items-center justify-center h-full">
@@ -180,6 +185,14 @@ export default function DocumentEditorPage() {
         />
       )}
 
+      {isShapesToolbarOpen && activeToolId === 'shapes' && (
+        <ShapesToolbar
+          selectedShapeType={selectedShapeType}
+          setSelectedShapeType={setSelectedShapeType}
+          onClose={() => setIsShapesToolbarOpen(false)}
+        />
+      )}
+
       <BottomToolbar
         activeToolId={activeToolId}
         setActiveToolId={setActiveToolId}
@@ -187,6 +200,8 @@ export default function DocumentEditorPage() {
         setIsPenSettingsOpen={setIsPenSettingsOpen}
         isEraserSettingsOpen={isEraserSettingsOpen}
         setIsEraserSettingsOpen={setIsEraserSettingsOpen}
+        isShapesToolbarOpen={isShapesToolbarOpen}
+        setIsShapesToolbarOpen={setIsShapesToolbarOpen}
         onImageUploaded={handleImageUploaded}
         onPagesImported={handlePagesImported}
       />
